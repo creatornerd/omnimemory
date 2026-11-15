@@ -3,15 +3,20 @@ import { MAX_DISMISSED, discover, textKey, type DiscoverySource, type FoundItem 
 import { findSensitive } from './sensitive';
 import type { MemoryService } from './service';
 import {
+  FIRST_WRITE,
   SYNC_MODES,
+  addActivity,
   applyResults,
   emptySyncState,
   labelSnapshot,
   pendingChanges,
   planSync,
+  remember,
   repairContent,
   sameMeaning,
   syncBlocked,
+  type ActivityEntry,
+  type HeldChange,
   type OpResult,
   type Plan,
   type RemoteEntry,
@@ -82,7 +87,14 @@ export class SyncService {
   }
 
   async state(site: SiteId): Promise<SiteSyncState> {
-    return { ...emptySyncState(site), ...(await this.backend.getSyncState(site)) };
+    const stored = (await this.backend.getSyncState(site)) as Partial<SiteSyncState> | undefined;
+    const state: SiteSyncState = { ...emptySyncState(site), ...stored };
+    // Saved by a version from before first-write previews: that chatbot was
+    // already being synced, so don't ask again.
+    if (stored && stored.approvedAt === undefined && (stored.links?.length ?? 0) > 0) {
+      state.approvedAt = stored.lastSyncAt ?? this.now().toISOString();
+    }
+    return state;
   }
 
   private async save(state: SiteSyncState): Promise<void> {
@@ -120,14 +132,20 @@ export class SyncService {
     const repaired = await this.repairMemories();
 
     // Pass 1: changes made on the chatbot's side come into OmniMemory first.
+    const linksBefore = state.links;
     let library = await this.memories.all();
     const first = planSync({ site, memories: library, settings, state, remote, now });
-    let links = await this.applyPulls(site, first, remote);
+    const pulled = await this.applyPulls(site, first, remote, library);
+    let links = pulled.links;
     if (first.pulls.length > 0) library = await this.memories.all();
 
     // Pass 2: with those applied, work out what to write to the chatbot.
     state = { ...state, links };
     const plan = planSync({ site, memories: library, settings, state, remote, now });
+    // Entries the user just agreed to link.
+    const linked = plan.links.filter(
+      (link) => link.owned === false && !linksBefore.some((old) => old.memoryId === link.memoryId && old.remoteId === link.remoteId),
+    );
     links = plan.links;
 
     const planId = this.newId();
@@ -140,6 +158,12 @@ export class SyncService {
           : []),
         ...plan.notes,
       ],
+      held: plan.held,
+      activity: addActivity(
+        state,
+        [...pulled.activity, ...linked.map((link) => ({ kind: 'linked' as const, text: link.remoteText, memoryId: link.memoryId }))],
+        now,
+      ),
       inflight: { planId, ops: plan.ops, startedAt: now.toISOString() },
       cache: { ...state.cache, leftOut: JSON.stringify(plan.leftOut ?? []) },
     };
@@ -179,13 +203,22 @@ export class SyncService {
     return changed;
   }
 
-  /** Apply pulls; returns the links adjusted to match. */
-  private async applyPulls(site: SiteId, plan: Plan, remote: RemoteSnapshot): Promise<SyncLink[]> {
+  /** Apply pulls; returns the links adjusted to match, and what changed. */
+  private async applyPulls(
+    site: SiteId,
+    plan: Plan,
+    remote: RemoteSnapshot,
+    library: { id: string; content: string }[],
+  ): Promise<{ links: SyncLink[]; activity: Omit<ActivityEntry, 'id' | 'at'>[] }> {
     let links = [...plan.links];
+    const activity: Omit<ActivityEntry, 'id' | 'at'>[] = [];
+    const contentOf = (id: string) => library.find((memory) => memory.id === id)?.content ?? '';
     for (const pull of plan.pulls) {
       try {
         if (pull.kind === 'edit') {
+          const before = contentOf(pull.memoryId);
           const memory = await this.memories.update(pull.memoryId, { content: pull.content });
+          activity.push({ kind: 'edited-there', text: memory.content, memoryId: memory.id, before });
           const entryText = SYNC_MODES[site] === 'items'
             ? remote.managed.find((entry) => entry.id === links.find((l) => l.memoryId === pull.memoryId)?.remoteId)?.text
             : undefined;
@@ -197,20 +230,22 @@ export class SyncService {
         } else if (pull.kind === 'unshare') {
           await this.memories.update(pull.memoryId, { permissions: { [site]: false } });
           links = links.filter((link) => link.memoryId !== pull.memoryId);
+          activity.push({ kind: 'removed-there', text: contentOf(pull.memoryId), memoryId: pull.memoryId });
         } else {
           const memory = await this.memories.create({
             content: pull.content.slice(0, MAX_CONTENT_LENGTH),
             source: site,
           });
+          activity.push({ kind: 'imported', text: memory.content, memoryId: memory.id });
           if (pull.remoteId) {
-            links.push({ memoryId: memory.id, remoteId: pull.remoteId, pushedText: memory.content, remoteText: pull.remoteText });
+            links.push({ memoryId: memory.id, remoteId: pull.remoteId, pushedText: memory.content, remoteText: pull.remoteText, owned: false });
           }
         }
       } catch (error) {
         console.warn('[OmniMemory] could not apply a change from', site, error);
       }
     }
-    return links;
+    return { links, activity };
   }
 
   private withSnapshot(state: SiteSyncState, remote: RemoteSnapshot): SiteSyncState {
@@ -323,7 +358,7 @@ export class SyncService {
         if (item.remoteId && SYNC_MODES[site] === 'items') {
           // Link it to the entry it came from, so the chatbot isn't given a
           // second copy (and gets the edited wording, if it was changed).
-          links.push({ memoryId: memory.id, remoteId: item.remoteId, pushedText: item.original, remoteText: item.original });
+          links.push({ memoryId: memory.id, remoteId: item.remoteId, pushedText: item.original, remoteText: item.original, owned: false });
         }
       }
       // Re-read: a sync may have run meanwhile.
@@ -350,6 +385,109 @@ export class SyncService {
       const state = await this.state(site);
       if (state.dismissed.length > 0) await this.save({ ...state, dismissed: [] });
     }
+  }
+
+  // ── Asking first ─────────────────────────────────────────────────────────
+
+  /** Every change waiting for the user's OK, across all chatbots. */
+  async allHeld(): Promise<(HeldChange & { site: SiteId })[]> {
+    const states = await Promise.all(SITE_IDS.map((site) => this.state(site)));
+    return states.flatMap((state) => state.held.map((change) => ({ ...change, site: state.site })));
+  }
+
+  /**
+   * The user's answer to a held change. The next sync acts on it (the
+   * dashboard starts one straight away).
+   *  - first-write: yes = start writing to this chatbot
+   *  - adopt: yes = link the chatbot's entry to the memory; no = leave the
+   *    chatbot's entry alone and don't add a copy
+   *  - delete: yes = remove it from the chatbot; no = keep it there, no longer
+   *    linked to OmniMemory
+   */
+  async decide(site: SiteId, key: string, yes: boolean): Promise<void> {
+    let state = await this.state(site);
+    const change = state.held.find((item) => item.key === key);
+    const held = state.held.filter((item) => item.key !== key);
+    if (key === FIRST_WRITE) {
+      state = { ...state, held, approvedAt: yes ? this.now().toISOString() : state.approvedAt };
+    } else if (yes) {
+      state = { ...state, held, approved: remember(state.approved, key), declined: state.declined.filter((k) => k !== key) };
+    } else if (change?.kind === 'delete') {
+      const remoteId = key.slice('delete:'.length);
+      state = {
+        ...state,
+        held,
+        links: state.links.filter((link) => link.remoteId !== remoteId),
+        // It stays on the chatbot as the chatbot's own; don't offer it back
+        // on the Review page either.
+        dismissed: change.remoteText ? remember(state.dismissed, textKey(change.remoteText)) : state.dismissed,
+      };
+    } else {
+      state = { ...state, held, declined: remember(state.declined, key), approved: state.approved.filter((k) => k !== key) };
+    }
+    await this.save(state);
+  }
+
+  /** Say yes to everything waiting on this chatbot. */
+  async approveAll(site: SiteId): Promise<void> {
+    for (const change of (await this.state(site)).held) await this.decide(site, change.key, true);
+  }
+
+  /**
+   * Undo something syncing did. Works by changing the memory in OmniMemory;
+   * the next sync then puts the chatbot back in step.
+   */
+  async undo(site: SiteId, activityId: string): Promise<string> {
+    const state = await this.state(site);
+    const entry = state.activity.find((item) => item.id === activityId);
+    if (!entry || entry.undoneAt || !entry.memoryId) throw new Error('This can’t be undone.');
+    const memory = await this.memories.get(entry.memoryId);
+    let message: string;
+    switch (entry.kind) {
+      case 'linked': {
+        // Unlink, and leave the chatbot's own entry exactly where it was.
+        const fresh = await this.state(site);
+        const link = fresh.links.find((item) => item.memoryId === entry.memoryId && item.owned === false);
+        if (!link) throw new Error('It’s no longer linked.');
+        await this.save({
+          ...fresh,
+          links: fresh.links.filter((item) => item !== link),
+          declined: remember(fresh.declined, `adopt:${link.memoryId}:${link.remoteId}`),
+        });
+        message = 'Unlinked. The chatbot keeps its own entry, and OmniMemory won’t change it.';
+        break;
+      }
+      case 'added':
+        if (!memory) throw new Error('That memory no longer exists.');
+        await this.memories.update(memory.id, { permissions: { [site]: false } });
+        message = 'Stopped sharing it with this chatbot. It will be taken off at the next sync.';
+        break;
+      case 'removed':
+      case 'removed-there':
+        if (!memory) throw new Error('That memory was deleted for good.');
+        if (memory.status === 'deleted') await this.memories.restore([memory.id]);
+        await this.memories.update(memory.id, { permissions: { [site]: true } });
+        message = 'Put back. It will be added to the chatbot again at the next sync.';
+        break;
+      case 'edited-there':
+        if (!memory || entry.before === undefined) throw new Error('That memory no longer exists.');
+        await this.memories.update(memory.id, { content: entry.before });
+        message = 'Changed back. The chatbot gets the old wording at the next sync.';
+        break;
+      case 'imported':
+        if (!memory) throw new Error('That memory no longer exists.');
+        await this.memories.remove([memory.id]);
+        message = 'Moved to Recently Deleted.';
+        break;
+      default:
+        throw new Error('This can’t be undone.');
+    }
+    const fresh = await this.state(site);
+    await this.save({
+      ...fresh,
+      activity: fresh.activity.map((item) => (item.id === activityId ? { ...item, undoneAt: this.now().toISOString() } : item)),
+    });
+    return message;
   }
 
   /** Forget all bookkeeping for a chatbot (its own memory is left as it is). */

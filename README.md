@@ -13,6 +13,14 @@ hide and delete everything it stores.
   and OmniMemory picks that up. The dashboard's **Chatbot memory** page shows what each chatbot currently
   remembers, and has an on/off switch per chatbot. This is the only network traffic, and it goes only to
   that chatbot's own site, using your normal sign-in.
+- **Sync asks before it does anything risky.** It's off until you turn it on for a chatbot, and the first
+  time it shows exactly what it would add before writing anything. OmniMemory remembers which chatbot
+  entries it created: if a chatbot already had something that matches one of your memories, it asks before
+  linking it, and it never removes an entry the chatbot had first without asking. Anything waiting for your OK
+  shows on the toolbar icon (amber) and in the popup.
+- **Every change is logged and can be undone.** Each chatbot's card has a **Recent activity** feed — added,
+  updated, removed, linked, edited on the chatbot — with one-click undo (**Put back**, **Change back**,
+  **Take off**, **Unlink**…).
 - **Review what your chatbots already know.** Every sync also digs through what each chatbot remembers —
   Gemini's instructions, ChatGPT's AI-written memory summary, saved memories and custom instructions — and
   lists anything OmniMemory doesn't have yet on the dashboard's **Review** page, rephrased as short notes
@@ -56,7 +64,7 @@ Reload any open chatbot tabs too, because they keep running the old content scri
 npm test
 ```
 
-There are 142 tests in 11 files. They run the real IndexedDB storage layer (using `fake-indexeddb`) and the
+There are 151 tests in 11 files. They run the real IndexedDB storage layer (using `fake-indexeddb`) and the
 same message router the content scripts talk to, so they cover the parts that decide what a chatbot can see.
 
 | File | What it covers |
@@ -69,7 +77,7 @@ same message router the content scripts talk to, so they cover the parts that de
 | `tests/import-export.test.ts` | Export format, round-trip import, plain-text/JSON import, review rules, context building |
 | `tests/insert.test.ts` | How text gets into the message box: textarea, paste, `execCommand`, fallthrough, failure leading to Copy |
 | `tests/permissions.test.ts` | Sharing rules and global/per-site pause |
-| `tests/sync.test.ts` | Chatbot memory sync against fake Gemini and ChatGPT that behave like the real ones: add/edit/delete/restore, edits and removals made on the chatbot coming back, no duplicates, credentials never copied, pause and per-chatbot switch, refused writes, one tab at a time, ChatGPT's 1,500-character limit, parsing replies captured from the real sites |
+| `tests/sync.test.ts` | Chatbot memory sync against fake Gemini and ChatGPT that behave like the real ones: add/edit/delete/restore, edits and removals made on the chatbot coming back, no duplicates, credentials never copied, pause and per-chatbot switch, refused writes, one tab at a time, ChatGPT's 1,500-character limit, parsing replies captured from the real sites, off by default and first-write preview, asking before linking or removing an entry the chatbot had first, the activity log and undo |
 | `tests/discover.test.ts` | The Review checklist: splitting and rephrasing what chatbots remember, skipping what you already have and credentials, conflict flags, keep (with edits) / skip / bring back skipped, a kept Gemini entry not being added twice |
 | `tests/no-network.test.ts` | Only one file may make requests and only to the chatbot site itself, no HTML injection, minimal manifest permissions |
 
@@ -105,7 +113,9 @@ These steps follow the acceptance criteria. You need to be signed in to at least
 
 Be signed in to ChatGPT and Gemini in the Chrome profile where OmniMemory is installed.
 
-1. Open the dashboard → **Chatbot memory**. ChatGPT and Gemini show **Keep in sync** on.
+1. Open the dashboard → **Chatbot memory** and turn **Keep in sync** on for ChatGPT and Gemini (it's off
+   for new installs). OmniMemory reads each chatbot, then shows **Waiting for your OK** with a preview of
+   what it would add. Nothing has been written yet. Press **Looks good, start syncing**.
 2. Save a memory in the popup, e.g. `I program VEX robots using PROS and LemLib`. Within a few seconds
    OmniMemory syncs: if a ChatGPT or Gemini tab is open it does it there, otherwise it briefly opens one in
    a background tab and closes it again.
@@ -125,7 +135,13 @@ Be signed in to ChatGPT and Gemini in the Chrome profile where OmniMemory is ins
    want, then **Keep and sync**. The kept items appear in your library and, a few seconds later, in ChatGPT's
    custom instructions; the Gemini one isn't added to Gemini a second time. Unticked items won't be suggested
    again (**Bring back skipped suggestions** undoes that).
-9. Turn **Keep in sync** off for a chatbot → nothing more is written there. Turn off **Sync in the
+9. **Asking first:** add `I prefer metric units` directly in Gemini, then save the same note in OmniMemory.
+   Gemini's card asks **Gemini already has this** instead of adding a copy. Choose **Leave Gemini's alone**
+   and then delete the note → Gemini's instruction is untouched. Or choose **Link them**, then delete the
+   note → the card asks **Remove this from Gemini?** before touching it.
+10. **Undo:** delete a synced memory, then under **Recent activity** press **Put back** on the *Removed from
+    Gemini* row → it's restored and re-added at the next sync.
+11. Turn **Keep in sync** off for a chatbot → nothing more is written there. Turn off **Sync in the
    background** to sync only while you have the chatbot open.
 
 To watch the requests: open DevTools on the chatbot tab → Network. You'll see calls to that same site only

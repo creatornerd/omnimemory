@@ -100,7 +100,8 @@ export const DEFAULT_SETTINGS: Settings = {
   relevanceFromPage: true,
   theme: 'system',
   libraryView: 'detailed',
-  siteSync: { chatgpt: true, claude: true, gemini: true },
+  // Off until the user turns it on for a chatbot (and OKs the first write).
+  siteSync: { chatgpt: false, claude: false, gemini: false },
   syncInBackground: true,
 };
 

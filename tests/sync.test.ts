@@ -15,7 +15,7 @@ import type { SiteId } from '../src/core/types';
 import { parseBatchResponse } from '../src/content/sync/gemini';
 import { parseSummaryStream } from '../src/content/sync/chatgpt';
 import { parseRequest, parseRequestWithReason } from '../src/shared/messages';
-import { createHarness } from './helpers';
+import { createHarness, createSyncHarness } from './helpers';
 
 type Harness = ReturnType<typeof createHarness>;
 
@@ -101,7 +101,7 @@ async function pending(h: Harness, site: SiteId) {
 
 describe('Gemini (list of entries)', () => {
   it('adds a new memory, then has nothing left to do', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'I program VEX robots using PROS and LemLib' });
     expect(await pending(h, 'gemini')).toBe(1);
@@ -119,7 +119,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('edits the same Gemini entry when the memory is edited', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     const memory = await h.service.create({ content: 'I use Python 3.11' });
     await sync(h, 'gemini', gemini);
@@ -133,7 +133,7 @@ describe('Gemini (list of entries)', () => {
 
   it('removes the entry when the memory is deleted, made private, outdated or unshared', async () => {
     for (const change of ['delete', 'private', 'outdated', 'unshare'] as const) {
-      const h = createHarness();
+      const h = await createSyncHarness();
       const gemini = new FakeGemini();
       const memory = await h.service.create({ content: 'My robot has a 4-motor drivetrain' });
       await sync(h, 'gemini', gemini);
@@ -151,7 +151,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('puts a restored memory back', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     const memory = await h.service.create({ content: 'I compete in VEX V5' });
     await sync(h, 'gemini', gemini);
@@ -165,7 +165,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('brings edits made in Gemini back into OmniMemory', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     const memory = await h.service.create({ content: 'I live in Seattle' });
     await sync(h, 'gemini', gemini);
@@ -180,7 +180,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('stops sharing a memory with Gemini when it is removed in Gemini', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     const memory = await h.service.create({ content: 'I like dark mode' });
     await sync(h, 'gemini', gemini);
@@ -196,7 +196,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('lists entries added in Gemini for review instead of importing them, and links same-meaning ones', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'I program VEX robots' });
     gemini.add('I program VEX robots.'); // already there, same meaning
@@ -211,7 +211,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('never copies credentials in either direction', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'my api key is sk-abcdefghijklmnopqrstuvwxyz123456' });
     gemini.add('password: hunter2hunter2!');
@@ -221,7 +221,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('writes nothing while sharing is paused or sync is off for Gemini', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'I like tea' });
 
@@ -235,7 +235,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('does not keep retrying something Gemini refused', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'REFUSE this one' });
     await sync(h, 'gemini', gemini);
@@ -249,7 +249,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('doesn’t treat an entry as removed in Gemini when the save didn’t return its id', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     const memory = await h.service.create({ content: 'I like tea' });
     const begin = await h.ask('gemini', { type: 'sync/begin', remote: gemini.snapshot() });
@@ -263,7 +263,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('lets only one tab sync at a time', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'I like tea' });
     const first = await h.ask('gemini', { type: 'sync/begin', remote: gemini.snapshot() });
@@ -276,7 +276,7 @@ describe('Gemini (list of entries)', () => {
   });
 
   it('keeps each site to its own sync state', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     await h.service.create({ content: 'I like tea' });
     await sync(h, 'gemini', gemini);
@@ -287,7 +287,7 @@ describe('Gemini (list of entries)', () => {
 
 describe('ChatGPT (custom instructions block)', () => {
   it('writes shared memories into a marked block and leaves the user’s own text alone', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const chatgpt = new FakeChatGpt('I am a high-school student.');
     await h.service.create({ content: 'I program VEX robots' });
     await h.service.create({ content: 'Private thing', enabled: false });
@@ -305,7 +305,7 @@ describe('ChatGPT (custom instructions block)', () => {
   });
 
   it('updates and removes lines as memories change, and drops the block when empty', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const chatgpt = new FakeChatGpt();
     const a = await h.service.create({ content: 'Line A' });
     await sync(h, 'chatgpt', chatgpt);
@@ -319,7 +319,7 @@ describe('ChatGPT (custom instructions block)', () => {
   });
 
   it('brings line edits, removals and additions made in ChatGPT back', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const chatgpt = new FakeChatGpt();
     const tea = await h.service.create({ content: 'I like tea' });
     await sync(h, 'chatgpt', chatgpt);
@@ -339,7 +339,7 @@ describe('ChatGPT (custom instructions block)', () => {
   });
 
   it('keeps the most recently used memories when they don’t all fit', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const chatgpt = new FakeChatGpt('x'.repeat(1300));
     for (let i = 0; i < 10; i += 1) await h.service.create({ content: `Memory number ${i} ${'y'.repeat(20)}` });
     await sync(h, 'chatgpt', chatgpt);
@@ -353,7 +353,7 @@ describe('ChatGPT (custom instructions block)', () => {
 
 describe('both chatbots together', () => {
   it('an entry approved from Gemini reaches ChatGPT without a second copy in Gemini, and deleting it removes it from both', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = new FakeGemini();
     const chatgpt = new FakeChatGpt();
     gemini.add('I am learning PID tuning');
@@ -371,8 +371,14 @@ describe('both chatbots together', () => {
     await h.service.remove([memory.id]);
     await sync(h, 'gemini', gemini);
     await sync(h, 'chatgpt', chatgpt);
+    expect(chatgpt.field).toBe(''); // OmniMemory's own block line: removed
+    // Gemini had it first, so removing it there asks.
+    expect(gemini.items.size).toBe(1);
+    const [held] = (await h.sync.state('gemini')).held;
+    expect(held).toMatchObject({ kind: 'delete', remoteText: 'I am learning PID tuning' });
+    await h.sync.decide('gemini', held.key, true);
+    await sync(h, 'gemini', gemini);
     expect(gemini.items.size).toBe(0);
-    expect(chatgpt.field).toBe('');
   });
 });
 
@@ -459,7 +465,7 @@ describe('recovering from a damaged ChatGPT block', () => {
   });
 
   it('repairs damaged memories and the field in one sync, without unsharing anything', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const chatgpt = new FakeChatGpt(CORRUPTED);
     const good = await h.service.create({ content: FISH });
     const bad1 = await h.service.create({ content: `${S}\n- ${FISH}\n${E}` });
@@ -481,7 +487,7 @@ describe('recovering from a damaged ChatGPT block', () => {
   });
 
   it('writes two memories that say the same thing as one line, and settles', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const chatgpt = new FakeChatGpt();
     await h.service.create({ content: 'I like tea' });
     await h.service.create({ content: 'i like tea.' });
@@ -492,7 +498,7 @@ describe('recovering from a damaged ChatGPT block', () => {
   });
 
   it('accepts a ChatGPT summary section with no text instead of rejecting the sync', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const remote = {
       managed: [],
       readOnly: [
@@ -511,5 +517,175 @@ describe('recovering from a damaged ChatGPT block', () => {
       error: 'managed.text must be a string',
     });
     expect(parseRequestWithReason({ type: 'nope' })).toEqual({ error: 'unknown request type' });
+  });
+});
+
+describe('asking first', () => {
+  it('is off until turned on, then previews the first write instead of writing', async () => {
+    const h = createHarness();
+    const gemini = new FakeGemini();
+    await h.service.create({ content: 'I prefer metric units' });
+    expect((await h.service.getSettings()).siteSync).toEqual({ chatgpt: false, claude: false, gemini: false });
+    expect((await sync(h, 'gemini', gemini)).begin.status).toBe('skip');
+
+    await h.enableSync(['gemini'], false);
+    expect(await pending(h, 'gemini')).toBe(1); // one run to build the preview
+    const first = await sync(h, 'gemini', gemini);
+    expect(first.ops).toEqual([]);
+    expect(gemini.items.size).toBe(0);
+    const [preview] = (await h.sync.state('gemini')).held;
+    expect(preview).toMatchObject({ kind: 'first-write', preview: [{ action: 'add', text: 'I prefer metric units' }] });
+    expect(await pending(h, 'gemini')).toBe(0); // waits for the user, no loop
+
+    await h.sync.decide('gemini', preview.key, true);
+    await sync(h, 'gemini', gemini);
+    expect(gemini.texts()).toEqual(['I prefer metric units.']);
+    expect((await h.sync.state('gemini')).held).toEqual([]);
+  });
+
+  it('asks before taking over an entry Gemini already had, and never deletes it silently', async () => {
+    const h = await createSyncHarness();
+    const gemini = new FakeGemini();
+    gemini.add('I prefer metric units.');
+    const memory = await h.service.create({ content: 'I prefer metric units' });
+
+    // No duplicate, no link, no write: a question.
+    expect((await sync(h, 'gemini', gemini)).ops).toEqual([]);
+    let state = await h.sync.state('gemini');
+    expect(state.links).toEqual([]);
+    expect(state.held).toMatchObject([{ kind: 'adopt', memoryText: 'I prefer metric units', remoteText: 'I prefer metric units.' }]);
+    expect(await pending(h, 'gemini')).toBe(0);
+
+    // Deleting the note now leaves Gemini's own instruction alone.
+    await h.service.remove([memory.id]);
+    expect((await sync(h, 'gemini', gemini)).ops).toEqual([]);
+    expect(gemini.texts()).toEqual(['I prefer metric units.']);
+    state = await h.sync.state('gemini');
+    expect(state.held).toEqual([]);
+  });
+
+  it('once linked with the user’s OK, edits flow through but removing still asks', async () => {
+    const h = await createSyncHarness();
+    const gemini = new FakeGemini();
+    gemini.add('I prefer metric units.');
+    const memory = await h.service.create({ content: 'I prefer metric units' });
+    await sync(h, 'gemini', gemini);
+    const [adopt] = (await h.sync.state('gemini')).held;
+    await h.sync.decide('gemini', adopt.key, true);
+    await sync(h, 'gemini', gemini);
+    const state = await h.sync.state('gemini');
+    expect(state.links).toMatchObject([{ memoryId: memory.id, remoteId: 'g1', owned: false }]);
+    expect(state.activity.map((a) => a.kind)).toEqual(['linked']);
+
+    await h.service.update(memory.id, { content: 'I prefer metric units, except for cooking' });
+    await sync(h, 'gemini', gemini);
+    expect(gemini.texts()).toEqual(['I prefer metric units, except for cooking.']);
+
+    await h.service.remove([memory.id]);
+    await sync(h, 'gemini', gemini);
+    expect(gemini.items.size).toBe(1);
+    const [held] = (await h.sync.state('gemini')).held;
+    expect(held.kind).toBe('delete');
+
+    // "Keep it on Gemini": unlinked, left there, not offered on Review.
+    await h.sync.decide('gemini', held.key, false);
+    await sync(h, 'gemini', gemini);
+    expect(gemini.items.size).toBe(1);
+    expect((await h.sync.state('gemini')).links).toEqual([]);
+    expect(await h.sync.allFound()).toEqual([]);
+  });
+
+  it('leaving Gemini’s entry alone doesn’t add a copy', async () => {
+    const h = await createSyncHarness();
+    const gemini = new FakeGemini();
+    gemini.add('I prefer metric units.');
+    await h.service.create({ content: 'I prefer metric units' });
+    await sync(h, 'gemini', gemini);
+    const [adopt] = (await h.sync.state('gemini')).held;
+    await h.sync.decide('gemini', adopt.key, false);
+    expect((await sync(h, 'gemini', gemini)).ops).toEqual([]);
+    expect(gemini.items.size).toBe(1);
+    expect((await h.sync.state('gemini')).held).toEqual([]);
+    expect(await pending(h, 'gemini')).toBe(0);
+  });
+
+  it('removes entries OmniMemory added itself without asking', async () => {
+    const h = await createSyncHarness();
+    const gemini = new FakeGemini();
+    const memory = await h.service.create({ content: 'I like tea' });
+    await sync(h, 'gemini', gemini);
+    await h.service.remove([memory.id]);
+    expect((await sync(h, 'gemini', gemini)).ops.map((op) => op.op)).toEqual(['delete']);
+    expect(gemini.items.size).toBe(0);
+  });
+
+  it('keeps syncing a chatbot that was set up before previews existed', async () => {
+    const h = createHarness();
+    const gemini = new FakeGemini();
+    await h.enableSync(['gemini'], false);
+    const memory = await h.service.create({ content: 'I like tea' });
+    gemini.add('I like tea.');
+    // State as an older version saved it: no approvedAt, links without owned.
+    const legacy = { site: 'gemini', links: [{ memoryId: memory.id, remoteId: 'g1', pushedText: 'I like tea', remoteText: 'I like tea.' }], snapshot: null, lastSyncAt: '2026-01-01T00:00:00.000Z', lastError: null, notes: [], failures: [], inflight: null, cache: {}, found: [], dismissed: [], accepted: [] };
+    await h.backend.putSyncState(legacy as never);
+    await h.service.create({ content: 'I like coffee' });
+    expect((await sync(h, 'gemini', gemini)).ops.map((op) => op.op)).toEqual(['create']);
+    // An entry an older version linked: removing it asks, since it can't tell who added it.
+    await h.service.remove([memory.id]);
+    await sync(h, 'gemini', gemini);
+    expect((await h.sync.state('gemini')).held).toMatchObject([{ kind: 'delete', legacy: true }]);
+  });
+});
+
+describe('activity and undo', () => {
+  it('records what syncing did and can undo a removal', async () => {
+    const h = await createSyncHarness();
+    const gemini = new FakeGemini();
+    const memory = await h.service.create({ content: 'I like tea' });
+    await sync(h, 'gemini', gemini);
+    await h.service.remove([memory.id]);
+    await sync(h, 'gemini', gemini);
+    let state = await h.sync.state('gemini');
+    expect(state.activity.map((a) => [a.kind, a.text])).toEqual([
+      ['added', 'I like tea'],
+      ['removed', 'I like tea.'],
+    ]);
+
+    await h.sync.undo('gemini', state.activity[1].id);
+    expect((await h.service.get(memory.id))?.status).toBe('active');
+    await sync(h, 'gemini', gemini);
+    expect(gemini.texts()).toEqual(['I like tea.']);
+    state = await h.sync.state('gemini');
+    expect(state.activity[1].undoneAt).toBeTruthy();
+    await expect(h.sync.undo('gemini', state.activity[1].id)).rejects.toThrow();
+  });
+
+  it('undoes an edit made on the chatbot', async () => {
+    const h = await createSyncHarness();
+    const gemini = new FakeGemini();
+    const memory = await h.service.create({ content: 'I like tea' });
+    await sync(h, 'gemini', gemini);
+    gemini.items.set('g1', 'I like green tea.');
+    await sync(h, 'gemini', gemini);
+    expect((await h.service.get(memory.id))?.content).toBe('I like green tea.');
+    const edit = (await h.sync.state('gemini')).activity.find((a) => a.kind === 'edited-there');
+    expect(edit?.before).toBe('I like tea');
+
+    await h.sync.undo('gemini', edit!.id);
+    await sync(h, 'gemini', gemini);
+    expect((await h.service.get(memory.id))?.content).toBe('I like tea');
+    expect(gemini.texts()).toEqual(['I like tea.']);
+  });
+
+  it('lists ChatGPT block changes line by line', async () => {
+    const h = await createSyncHarness();
+    const chatgpt = new FakeChatGpt();
+    const a = await h.service.create({ content: 'I like tea' });
+    await sync(h, 'chatgpt', chatgpt);
+    await h.service.update(a.id, { content: 'I like coffee' });
+    await h.service.create({ content: 'I build robots' });
+    await sync(h, 'chatgpt', chatgpt);
+    const kinds = (await h.sync.state('chatgpt')).activity.map((x) => `${x.kind}:${x.text}`);
+    expect(kinds).toEqual(['added:I like tea', 'added:I build robots', 'updated:I like coffee']);
   });
 });

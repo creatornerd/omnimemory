@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Check, RefreshCw } from 'lucide-react';
+import { ArrowRight, Check, Link2, RefreshCw } from 'lucide-react';
 import {
   SITE_IDS,
   SYNC_MODES,
@@ -9,7 +9,9 @@ import {
   type RemoteEntry,
   type SiteId,
   type SiteSyncState,
+  type SyncLink,
 } from '../core';
+import { ActivityFeed, Approvals } from './SyncPanels';
 import { onChange } from '../shared/change-bus';
 import { getSyncService, isExtension } from '../shared/platform';
 import { SITES } from '../shared/sites';
@@ -61,14 +63,16 @@ function StatusLine({ site, state, store }: { site: SiteId; state: SiteSyncState
   if (blocked === 'not-supported') return <Badge>Not available yet</Badge>;
   if (blocked === 'off') return <Badge>Off</Badge>;
   if (blocked === 'paused') return <Badge tone="warn">Paused — sharing is off</Badge>;
+  if (state && state.held.length > 0) return <Badge tone="warn">Waiting for your OK</Badge>;
   if (state?.lastError) return <Badge tone="danger">Needs attention</Badge>;
   if (pending > 0) return <Badge tone="warn">{plural(pending, 'change', 'changes')} waiting</Badge>;
   if (state?.lastSyncAt) return <Badge tone="ok">In sync · {timeAgo(state.lastSyncAt)}</Badge>;
   return <Badge tone="warn">Not synced yet</Badge>;
 }
 
-function EntryList({ site, entries, store }: { site: SiteId; entries: RemoteEntry[]; store: Store }) {
+function EntryList({ site, entries, links, store }: { site: SiteId; entries: RemoteEntry[]; links: SyncLink[]; store: Store }) {
   const libraryIds = useMemo(() => new Set(store.library.map((memory) => memory.id)), [store.library]);
+  const ownedBy = useMemo(() => new Map(links.map((link) => [link.memoryId, link.owned])), [links]);
   const groups = useMemo(() => {
     const map = new Map<string, RemoteEntry[]>();
     for (const entry of entries) map.set(entry.group, [...(map.get(entry.group) ?? []), entry]);
@@ -93,11 +97,20 @@ function EntryList({ site, entries, store }: { site: SiteId; entries: RemoteEntr
                     {entry.title && <p className="text-xs font-medium">{entry.title}</p>}
                     <p className="text-[13px] leading-relaxed whitespace-pre-wrap text-ink-2">{entry.text}</p>
                   </div>
-                  {fromOmni && (
-                    <Badge tone="ok">
-                      <Check size={11} className="mr-0.5" /> In OmniMemory
-                    </Badge>
-                  )}
+                  {fromOmni &&
+                    (ownedBy.get(entry.memoryId as string) === false ? (
+                      <span title={`${SITES[site].label} had this first. OmniMemory keeps it up to date and asks before removing it.`}>
+                        <Badge>
+                          <Link2 size={11} className="mr-0.5" /> Linked
+                        </Badge>
+                      </span>
+                    ) : (
+                      <span title="OmniMemory added this">
+                        <Badge tone="ok">
+                          <Check size={11} className="mr-0.5" /> Added by OmniMemory
+                        </Badge>
+                      </span>
+                    ))}
                 </li>
               );
             })}
@@ -127,6 +140,21 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
     }
   }
 
+  async function setSync(on: boolean) {
+    await service.updateSettings({ siteSync: { [site]: on } });
+    if (!on) return;
+    try {
+      await requestSync(site);
+      toast(
+        state?.approvedAt
+          ? `Syncing with ${info.label}…`
+          : `Checking ${info.label}. You’ll see exactly what would change before anything is written.`,
+      );
+    } catch (error) {
+      toast((error as Error).message);
+    }
+  }
+
   return (
     <section className="rounded-xl border border-line bg-surface">
       <header className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -145,7 +173,7 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
               label={`Keep ${info.label}’s memory in sync`}
               disabled={!supported}
               checked={supported && settings.siteSync[site]}
-              onChange={(on) => void service.updateSettings({ siteSync: { [site]: on } as Record<SiteId, boolean> })}
+              onChange={(on) => void setSync(on)}
             />
           </label>
         </div>
@@ -164,6 +192,14 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
               {site === 'chatgpt' &&
                 ' ChatGPT reads custom instructions when a new chat starts, so changes show up in new chats, not ones already open. They don’t appear in ChatGPT’s own Memory summary, which ChatGPT writes from your chats; it’s shown here but OmniMemory doesn’t change it.'}
             </p>
+            {state && blocked === null && (
+              <Approvals
+                site={site}
+                held={state.held}
+                onAnswered={() => void requestSync(site).catch(() => {})}
+                onTurnOff={() => void setSync(false)}
+              />
+            )}
             {state?.lastError && (
               <div className="mt-3">
                 <Notice tone="danger">{state.lastError}</Notice>
@@ -180,13 +216,14 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
             </div>
             <div className="mt-2">
               {state?.snapshot ? (
-                <EntryList site={site} entries={state.snapshot.entries} store={store} />
+                <EntryList site={site} entries={state.snapshot.entries} links={state.links} store={store} />
               ) : (
                 <p className="py-3 text-xs text-ink-3">
                   Not checked yet. Open {info.hosts[0]} while signed in, or press Sync now.
                 </p>
               )}
             </div>
+            {state && <ActivityFeed site={site} activity={state.activity} />}
           </>
         )}
       </div>
@@ -205,9 +242,11 @@ export function ChatbotsView({ store }: { store: Store }) {
         <header className="pt-5">
           <h1 className="text-base font-semibold">Chatbot memory</h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-3">
-            OmniMemory keeps each chatbot’s own memory in step with the memories here. Add, edit or delete a memory
-            and the change is written to every chatbot it’s shared with. Change or remove it on the chatbot’s side and
-            OmniMemory picks that up too. Syncing uses your normal sign-in on each site and talks only to that site.
+            Turn on sync for a chatbot and OmniMemory keeps its own memory in step with the memories here. Add, edit
+            or delete a memory and the change is written to every chatbot it’s shared with. Change or remove it on the
+            chatbot’s side and OmniMemory picks that up too. It shows you its first write before making it, never
+            takes over or removes something the chatbot had before without asking, and every change can be undone
+            below. Syncing uses your normal sign-in on each site and talks only to that site.
           </p>
         </header>
 

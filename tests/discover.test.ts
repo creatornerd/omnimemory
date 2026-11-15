@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { candidatesFrom, discover, splitSentences, textKey, toFirstPerson, type FoundItem } from '../src/core/discover';
 import type { RemoteSnapshot, SyncOp, OpResult } from '../src/core/sync';
-import { createHarness } from './helpers';
+import { createHarness, createSyncHarness } from './helpers';
 
 describe('turning what a chatbot remembers into suggestions', () => {
   it('rewrites second-person summaries as first-person notes', () => {
@@ -35,7 +35,7 @@ describe('turning what a chatbot remembers into suggestions', () => {
 
 describe('discover', () => {
   it('skips what OmniMemory already has, credentials and skipped items; flags conflicts', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     await h.service.create({ content: 'I program VEX robots using PROS and LemLib.' });
     await h.service.create({ content: 'I use Python 3.11' });
     const memories = await h.service.library();
@@ -114,7 +114,7 @@ async function syncChatGpt(h: Harness, readOnly: RemoteSnapshot['readOnly']) {
 
 describe('the Review checklist', () => {
   it('finds things in ChatGPT’s memory summary during sync', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     await syncChatGpt(h, [
       { id: 'summary-overview', group: 'Memory summary (written by ChatGPT)', title: 'Overview', text: 'You eat fish for science experiments in school. You live near a lake.' },
     ]);
@@ -125,7 +125,7 @@ describe('the Review checklist', () => {
   });
 
   it('keeps ticked items (with edits) as memories, skips the rest for good, and can bring skipped back', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const summary = [
       { id: 'summary-overview', group: 'Memory summary (written by ChatGPT)', title: 'Overview', text: 'You eat fish for science experiments in school. You live near a lake.' },
     ];
@@ -151,7 +151,7 @@ describe('the Review checklist', () => {
   });
 
   it('refuses to keep text that looks like a credential, even after editing', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     await syncChatGpt(h, [{ id: 'summary-a', group: 'Memory summary (written by ChatGPT)', text: 'You like long walks on the beach.' }]);
     const [item] = await h.sync.allFound();
     const result = await h.sync.review([{ id: item.id, text: 'my password is hunter2hunter2!' }], []);
@@ -161,7 +161,7 @@ describe('the Review checklist', () => {
   });
 
   it('an approved Gemini entry that was reworded updates the same Gemini entry', async () => {
-    const h = createHarness();
+    const h = await createSyncHarness();
     const gemini = fakeGemini();
     gemini.add('Use bullets'); // short, but saved on purpose: still suggested
     gemini.add('I prefer metric units always');

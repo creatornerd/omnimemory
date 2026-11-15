@@ -51,7 +51,7 @@ export function Dashboard() {
   const store = useStore();
   const { service, library, trash, settings } = store;
   const toast = useToast();
-  const { found } = useFound();
+  const { found, held } = useFound();
   const [view, setView] = useState<DashboardView>(viewFromHash);
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [captured, setCaptured] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export function Dashboard() {
         <NavItem active={view === 'review'} onClick={() => go('review')} icon={<Inbox size={14} />} count={found.length}>
           Review
         </NavItem>
-        <NavItem active={view === 'chatbots'} onClick={() => go('chatbots')} icon={<Bot size={14} />}>
+        <NavItem active={view === 'chatbots'} onClick={() => go('chatbots')} icon={<Bot size={14} />} count={held.length}>
           Chatbot memory
         </NavItem>
         <NavItem active={view === 'trash'} onClick={() => go('trash')} icon={<Trash2 size={14} />} count={trash.length}>

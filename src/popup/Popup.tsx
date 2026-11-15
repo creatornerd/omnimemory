@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Eye, EyeOff, Inbox, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, Eye, EyeOff, Inbox, Pencil, Plus, Search, Trash2, X, ShieldCheck } from 'lucide-react';
 import { searchMemories, type Memory, type SiteId } from '../core';
 import { openDashboard, takePendingCapture } from '../shared/platform';
 import { SITE_LIST } from '../shared/sites';
@@ -22,7 +22,7 @@ function recency(memory: Memory): string {
 export function Popup() {
   const { service, library, settings, loading } = useStore();
   const toast = useToast();
-  const { found } = useFound();
+  const { found, held } = useFound();
   const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -127,6 +127,23 @@ export function Popup() {
           <span className="min-w-0 flex-1">
             <strong className="font-semibold">{plural(found.length, 'thing', 'things')} found on your chatbots.</strong>{' '}
             <span className="text-ink-2">Review</span>
+          </span>
+          <ArrowUpRight size={13} className="shrink-0 text-ink-3" />
+        </button>
+      )}
+
+      {held.length > 0 && (
+        <button
+          type="button"
+          onClick={() => void openDashboard('chatbots')}
+          className="mx-3.5 mb-2.5 flex items-center gap-2 rounded-lg border border-line-strong bg-warn-soft px-2.5 py-2 text-left text-xs hover:opacity-90"
+        >
+          <ShieldCheck size={14} className="shrink-0 text-warn" />
+          <span className="min-w-0 flex-1">
+            <strong className="font-semibold">
+              {plural(held.length, 'sync change needs', 'sync changes need')} your OK.
+            </strong>{' '}
+            <span className="text-ink-2">Check</span>
           </span>
           <ArrowUpRight size={13} className="shrink-0 text-ink-3" />
         </button>

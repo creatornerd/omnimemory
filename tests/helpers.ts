@@ -2,6 +2,7 @@ import { IndexedDbBackend } from '../src/core/indexeddb-backend';
 import { MemoryService } from '../src/core/service';
 import { SyncService } from '../src/core/sync-service';
 import { handleRequest } from '../src/background/router';
+import { emptySyncState } from '../src/core/sync';
 import type { SiteId } from '../src/core/types';
 import type { Request, ResponseMap } from '../src/shared/messages';
 
@@ -47,9 +48,22 @@ export function createHarness(start = '2026-01-01T00:00:00.000Z') {
     return result.items.map((item) => item.memory.content);
   }
 
+  /**
+   * Turn on chatbot sync for ChatGPT and Gemini as if the user had already
+   * OK'd the first write (sync is off by default, and the first write asks).
+   */
+  async function enableSync(sites: SiteId[] = ['chatgpt', 'gemini'], approved = true) {
+    await service.updateSettings({ siteSync: Object.fromEntries(sites.map((site) => [site, true])) });
+    if (!approved) return;
+    for (const site of sites) {
+      await backend.putSyncState({ ...emptySyncState(site), approvedAt: '2026-01-01T00:00:00.000Z' });
+    }
+  }
+
   return {
     service,
     backend,
+    enableSync,
     sync,
     finished,
     ask,
@@ -63,4 +77,11 @@ export function createHarness(start = '2026-01-01T00:00:00.000Z') {
       now += hours * 60 * 60 * 1000;
     },
   };
+}
+
+/** A harness with ChatGPT and Gemini sync turned on and already approved. */
+export async function createSyncHarness(start?: string) {
+  const h = createHarness(start);
+  await h.enableSync();
+  return h;
 }

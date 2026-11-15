@@ -91,12 +91,17 @@ export function scheduleSync(delay = 2500): void {
 /** Show how many things are waiting on the Review page on the toolbar icon. */
 export async function updateBadge(): Promise<void> {
   try {
-    const count = (await getSyncService().allFound()).length;
-    await chrome.action.setBadgeBackgroundColor({ color: '#2f6fed' });
+    const sync = getSyncService();
+    const [found, held] = await Promise.all([sync.allFound(), sync.allHeld()]);
+    const count = found.length + held.length;
+    // Amber when a sync change is waiting for an OK, blue for review finds.
+    await chrome.action.setBadgeBackgroundColor({ color: held.length > 0 ? '#b45309' : '#2f6fed' });
     await chrome.action.setBadgeText({ text: count === 0 ? '' : count > 99 ? '99+' : String(count) });
-    await chrome.action.setTitle({
-      title: count === 0 ? 'OmniMemory' : `OmniMemory — ${count} found on your chatbots to review`,
-    });
+    const parts = [
+      ...(held.length > 0 ? [`${held.length} sync ${held.length === 1 ? 'change needs' : 'changes need'} your OK`] : []),
+      ...(found.length > 0 ? [`${found.length} found on your chatbots to review`] : []),
+    ];
+    await chrome.action.setTitle({ title: parts.length === 0 ? 'OmniMemory' : `OmniMemory — ${parts.join(' · ')}` });
   } catch {
     // The badge is a nicety; never let it break syncing.
   }

@@ -76,6 +76,12 @@ export interface SyncLink {
   pushedText: string;
   /** What the chatbot showed right after that write. */
   remoteText: string;
+  /**
+   * true = OmniMemory put this entry on the chatbot. false = the chatbot had
+   * it first and the user agreed to link it. Missing = linked by an older
+   * version, which didn't keep track (treated like false: removing it asks).
+   */
+  owned?: boolean;
 }
 
 /** Something the chatbot remembers, shown read-only in the dashboard. */
@@ -129,6 +135,74 @@ export interface SiteSyncState {
   dismissed: string[];
   /** Keys of suggestions the user kept (never suggested again). */
   accepted: string[];
+  /**
+   * When the user OK'd OmniMemory's first write to this chatbot. Until then
+   * nothing is written; the dashboard shows a preview instead.
+   */
+  approvedAt: string | null;
+  /** Keys of held changes (see HeldChange) the user approved. */
+  approved: string[];
+  /** Keys of held changes the user turned down. */
+  declined: string[];
+  /** Changes waiting for the user's OK, from the last sync. */
+  held: HeldChange[];
+  /** What syncing changed, newest last, for the dashboard (with undo). */
+  activity: ActivityEntry[];
+}
+
+/**
+ * A change OmniMemory won't make without asking first:
+ *  - "first-write": the first time it writes to a chatbot (shown as a preview)
+ *  - "adopt": the chatbot already has an entry that says the same as one of
+ *    your memories; linking means OmniMemory edits and removes it from now on
+ *  - "delete": removing an entry OmniMemory didn't put there itself
+ */
+export interface HeldChange {
+  key: string;
+  kind: 'first-write' | 'adopt' | 'delete';
+  memoryId?: string | null;
+  /** The memory's text, when there is one. */
+  memoryText?: string;
+  /** The chatbot's entry as it is now (adopt, delete). */
+  remoteText?: string;
+  /** delete: was the entry linked by an older version that didn't track ownership? */
+  legacy?: boolean;
+  /** first-write: what would be written. */
+  preview?: { action: 'add' | 'update' | 'remove'; text: string }[];
+}
+
+export const FIRST_WRITE = 'first-write';
+export const MAX_ACTIVITY = 100;
+const MAX_DECISIONS = 500;
+
+export type ActivityKind =
+  | 'added' // written to the chatbot
+  | 'updated' // chatbot's copy changed to match an edit
+  | 'removed' // taken off the chatbot
+  | 'linked' // an entry the chatbot already had is now kept in sync
+  | 'edited-there' // edited on the chatbot → memory edited
+  | 'removed-there' // removed on the chatbot → memory no longer shared with it
+  | 'imported'; // typed into OmniMemory's ChatGPT block → new memory
+
+export interface ActivityEntry {
+  id: string;
+  at: string;
+  kind: ActivityKind;
+  text: string;
+  memoryId: string | null;
+  /** The memory's text before an edit made on the chatbot (for undo). */
+  before?: string;
+  undoneAt?: string;
+}
+
+export function addActivity(state: SiteSyncState, entries: Omit<ActivityEntry, 'id' | 'at'>[], now: Date): ActivityEntry[] {
+  const at = now.toISOString();
+  const fresh = entries.map((entry, index) => ({ ...entry, id: `${at}#${index}`, at, text: entry.text.slice(0, 500) }));
+  return [...state.activity, ...fresh].slice(-MAX_ACTIVITY);
+}
+
+export function remember(list: string[], key: string): string[] {
+  return [...list.filter((item) => item !== key), key].slice(-MAX_DECISIONS);
 }
 
 export function emptySyncState(site: SiteId): SiteSyncState {
@@ -145,6 +219,11 @@ export function emptySyncState(site: SiteId): SiteSyncState {
     found: [],
     dismissed: [],
     accepted: [],
+    approvedAt: null,
+    approved: [],
+    declined: [],
+    held: [],
+    activity: [],
   };
 }
 
@@ -181,8 +260,14 @@ export interface Plan {
   /** Links after adoption and clean-up, before any op runs. */
   links: SyncLink[];
   notes: string[];
-  /** block mode: memories that would be written but don't fit. */
+  /**
+   * Memories that are shareable but deliberately not written, so they don't
+   * count as "waiting": they didn't fit (block mode), or are waiting on, or
+   * covered by, a decision about an entry the chatbot already had.
+   */
   leftOut?: string[];
+  /** Changes waiting for the user's OK. */
+  held: HeldChange[];
 }
 
 /** Loose comparison: Gemini, for one, adds a full stop to what it saves. */
@@ -337,12 +422,45 @@ export interface PlanInput {
 export function planSync(input: PlanInput): Plan {
   const mode = SYNC_MODES[input.site];
   if (!mode || syncBlocked(input.settings, input.site) !== null) {
-    return { ops: [], pulls: [], links: input.state.links, notes: [] };
+    return { ops: [], pulls: [], links: input.state.links, notes: [], held: [] };
   }
-  return mode === 'items' ? planItems(input) : planBlock(input);
+  const plan = mode === 'items' ? planItems(input) : planBlock(input);
+  if (input.state.approvedAt || plan.ops.length === 0) return plan;
+
+  // Never written to this chatbot before: show what would happen and wait.
+  return {
+    ...plan,
+    ops: [],
+    held: [{ key: FIRST_WRITE, kind: 'first-write', preview: previewOps(plan.ops, input.remote) }, ...plan.held],
+  };
+}
+
+/** What a set of ops would do, in words the dashboard can list. */
+function previewOps(ops: SyncOp[], remote: RemoteSnapshot): NonNullable<HeldChange['preview']> {
+  const preview: NonNullable<HeldChange['preview']> = [];
+  for (const op of ops) {
+    if (op.op === 'create') preview.push({ action: 'add', text: op.text });
+    else if (op.op === 'update') preview.push({ action: 'update', text: op.text });
+    else if (op.op === 'delete') {
+      preview.push({ action: 'remove', text: remote.managed.find((entry) => entry.id === op.remoteId)?.text ?? 'An entry' });
+    } else {
+      const current = remote.managed.map((entry) => entry.text);
+      for (const line of op.lines) {
+        if (!current.some((text) => sameMeaning(text, line.text))) preview.push({ action: 'add', text: line.text });
+      }
+      for (const text of current) {
+        if (!op.lines.some((line) => sameMeaning(line.text, text))) preview.push({ action: 'remove', text });
+      }
+    }
+  }
+  return preview;
 }
 
 function planItems({ site, memories, settings, state, remote, now }: PlanInput): Plan {
+  const approved = new Set(state.approved);
+  const declined = new Set(state.declined);
+  const held: HeldChange[] = [];
+  const leftOut: string[] = [];
   const byId = new Map(memories.map((memory) => [memory.id, memory]));
   const shareable = new Map(wanted(memories, settings, site).map((memory) => [memory.id, memory]));
   const remoteById = new Map(remote.managed.map((entry) => [entry.id, entry]));
@@ -370,8 +488,22 @@ function planItems({ site, memories, settings, state, remote, now }: PlanInput):
     linkedRemote.add(entry.id);
 
     if (!isWanted || !memory) {
-      ops.push({ op: 'delete', memoryId: link.memoryId, remoteId: entry.id });
       links.push(link);
+      const key = `delete:${entry.id}`;
+      if (link.owned || approved.has(key)) {
+        ops.push({ op: 'delete', memoryId: link.memoryId, remoteId: entry.id });
+      } else {
+        // The chatbot had this before OmniMemory (or an older version linked
+        // it without noting who added it): ask before removing it.
+        held.push({
+          key,
+          kind: 'delete',
+          memoryId: link.memoryId,
+          memoryText: memory?.content,
+          remoteText: entry.text,
+          legacy: link.owned === undefined,
+        });
+      }
       continue;
     }
 
@@ -393,11 +525,23 @@ function planItems({ site, memories, settings, state, remote, now }: PlanInput):
   // Entries on the chatbot that OmniMemory doesn't know about yet.
   const unlinked = remote.managed.filter((entry) => !linkedRemote.has(entry.id));
   for (const entry of unlinked) {
-    // Already there with the same wording: just link it, don't duplicate.
+    // Already there with the same wording: don't add a second copy. Linking
+    // it would let OmniMemory edit and remove the chatbot's own entry, so
+    // that waits for the user's OK.
     const match = [...shareable.values()].find((memory) => sameMeaning(memory.content, entry.text));
     if (match) {
-      links.push({ memoryId: match.id, remoteId: entry.id, pushedText: match.content, remoteText: entry.text });
       shareable.delete(match.id);
+      const key = `adopt:${match.id}:${entry.id}`;
+      // OmniMemory saved this itself but the chatbot didn't say under which id.
+      const ours = approved.has(`own:${match.id}`);
+      if (ours || approved.has(key)) {
+        links.push({ memoryId: match.id, remoteId: entry.id, pushedText: match.content, remoteText: entry.text, owned: ours });
+        continue;
+      }
+      leftOut.push(match.id);
+      if (!declined.has(key)) {
+        held.push({ key, kind: 'adopt', memoryId: match.id, memoryText: match.content, remoteText: entry.text });
+      }
       continue;
     }
     // Anything else stays on the chatbot untouched. It's offered on the
@@ -410,7 +554,7 @@ function planItems({ site, memories, settings, state, remote, now }: PlanInput):
     ops.push({ op: 'create', memoryId: memory.id, text: memory.content });
   }
 
-  return { ops, pulls, links, notes: [] };
+  return { ops, pulls, links, notes: [], leftOut, held };
 }
 
 function planBlock({ site, memories, settings, state, remote }: PlanInput): Plan {
@@ -477,7 +621,13 @@ function planBlock({ site, memories, settings, state, remote }: PlanInput): Plan
   const desired = lines.map((line) => line.text);
   const same =
     !remote.needsRewrite && desired.length === current.length && desired.every((line, index) => line === current[index]);
-  const links = [...lines, ...covered].map((line) => ({ memoryId: line.memoryId, remoteId: null, pushedText: line.text, remoteText: line.text }));
+  const links = [...lines, ...covered].map((line) => ({
+    memoryId: line.memoryId,
+    remoteId: null,
+    pushedText: line.text,
+    remoteText: line.text,
+    owned: true,
+  }));
   return {
     ops: same ? [] : [{ op: 'set-block', lines, covered }],
     pulls,
@@ -486,6 +636,7 @@ function planBlock({ site, memories, settings, state, remote }: PlanInput): Plan
     links: same ? links : state.links,
     notes,
     leftOut,
+    held: [],
   };
 }
 
@@ -500,6 +651,8 @@ export function applyResults(
   let links = [...plan.links];
   let failures = state.failures.filter((failure) => now.getTime() - new Date(failure.at).getTime() < FAILURE_BACKOFF_MS);
   const errors: string[] = [];
+  const activity: Omit<ActivityEntry, 'id' | 'at'>[] = [];
+  const owns: string[] = [];
 
   plan.ops.forEach((op, index) => {
     const result = results[index];
@@ -517,16 +670,23 @@ export function applyResults(
     switch (op.op) {
       case 'create':
         // Without the chatbot's id the entry can't be tracked; leave it
-        // unlinked and the next sync will match it up by its wording.
-        if (!result.remoteId) break;
+        // unlinked and the next sync will match it up by its wording (noting
+        // that OmniMemory added it, so that doesn't need asking about).
+        if (!result.remoteId) {
+          owns.push(`own:${op.memoryId}`);
+          activity.push({ kind: 'added', text: op.text, memoryId: op.memoryId });
+          break;
+        }
         links = links.filter((link) => link.memoryId !== op.memoryId);
         links.push({
           memoryId: op.memoryId,
           remoteId: result.remoteId,
           pushedText: op.text,
           remoteText: result.remoteText ?? op.text,
+          owned: true,
         });
         failures = failures.filter((failure) => failure.memoryId !== op.memoryId);
+        activity.push({ kind: 'added', text: op.text, memoryId: op.memoryId });
         break;
       case 'update':
         links = links.map((link) =>
@@ -535,18 +695,35 @@ export function applyResults(
             : link,
         );
         failures = failures.filter((failure) => failure.memoryId !== op.memoryId);
+        activity.push({ kind: 'updated', text: op.text, memoryId: op.memoryId });
         break;
-      case 'delete':
+      case 'delete': {
+        const gone = links.find((link) => link.remoteId === op.remoteId);
         links = links.filter((link) => link.remoteId !== op.remoteId);
+        activity.push({ kind: 'removed', text: gone?.remoteText ?? gone?.pushedText ?? '', memoryId: op.memoryId });
         break;
-      case 'set-block':
+      }
+      case 'set-block': {
+        const before = links;
         links = [...op.lines, ...(op.covered ?? [])].map((line) => ({
           memoryId: line.memoryId,
           remoteId: null,
           pushedText: line.text,
           remoteText: line.text,
+          owned: true,
         }));
+        for (const line of op.lines) {
+          const old = before.find((link) => link.memoryId === line.memoryId);
+          if (!old) activity.push({ kind: 'added', text: line.text, memoryId: line.memoryId });
+          else if (!sameMeaning(old.pushedText, line.text)) activity.push({ kind: 'updated', text: line.text, memoryId: line.memoryId });
+        }
+        for (const old of before) {
+          if (!links.some((link) => link.memoryId === old.memoryId)) {
+            activity.push({ kind: 'removed', text: old.pushedText, memoryId: old.memoryId });
+          }
+        }
         break;
+      }
     }
   });
 
@@ -554,6 +731,8 @@ export function applyResults(
     ...state,
     links,
     failures,
+    activity: addActivity(state, activity, now),
+    approved: owns.reduce(remember, state.approved),
     inflight: null,
     lastSyncAt: at,
     lastError: errors.length > 0 ? errors[0] : null,
@@ -576,11 +755,14 @@ export function pendingChanges(site: SiteId, memories: Memory[], settings: Setti
   const byId = new Map(memories.map((memory) => [memory.id, memory]));
   const ids = new Set(shareable.map((memory) => memory.id));
   let count = 0;
+  // Waiting on the user's OK: nothing to do until they decide.
+  if (!state.approvedAt && state.held.some((change) => change.kind === 'first-write')) return 0;
+  const heldDeletes = new Set(state.held.filter((change) => change.kind === 'delete').map((change) => change.key));
 
   for (const link of state.links) {
     const memory = byId.get(link.memoryId);
     if (!memory || !ids.has(link.memoryId)) {
-      count += 1;
+      if (!heldDeletes.has(`delete:${link.remoteId}`)) count += 1;
       continue;
     }
     const text = mode === 'items' ? memory.content : blockLine(memory.content);

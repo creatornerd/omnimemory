@@ -97,7 +97,7 @@ export function SettingsView({ store }: { store: Store }) {
 
         <Section
           title="New memories"
-          description="Who a memory is shared with when you first save it. You can change this per memory at any time."
+          description="Who a memory is shared with when you first save it. You can change this per memory at any time. If sync is on for a chatbot, sharing a memory with it also writes it to that chatbot’s own memory settings."
         >
           {SITE_LIST.map((site) => (
             <Row key={site.id} label={`Share new memories with ${site.label}`}>

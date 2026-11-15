@@ -213,7 +213,7 @@ sync/done ───────────────────────�
    entry edits the memory, a removed entry stops sharing that memory with that chatbot (it isn't deleted).
    Anything else the chatbot remembers is never imported automatically — it goes to Review (below). The one
    exception is a line typed into OmniMemory's own ChatGPT block, which becomes a memory directly.
-4. Same-meaning entries (case, spacing, a trailing full stop — Gemini adds one) are linked, not duplicated, and
+4. Same-meaning entries (case, spacing, a trailing full stop — Gemini adds one) are never duplicated, and
    don't count as edits.
 5. Credentials are never copied in either direction. A write the chatbot refuses is not retried for 6 hours.
 6. ChatGPT's field holds 1,500 characters; the most recently used memories are kept and the rest reported.
@@ -223,6 +223,29 @@ sync/done ───────────────────────�
    at the start of each sync; a repaired memory that duplicates another goes to Recently Deleted.
 8. Snapshot entries with no text (e.g. ChatGPT's "Dive deeper" summary section) are skipped, and a rejected
    message says which field was wrong.
+9. **Ownership.** Each link records `owned`: true when OmniMemory created the entry (a `create` result, or a
+   line in its own ChatGPT block), false when the chatbot had it first and the user agreed to link it (an
+   *adopt*, or a Gemini entry kept from Review). Links saved by older versions have no `owned` and are treated
+   as not owned. A create that succeeds without returning an id is remembered (`own:<memoryId>`) so the
+   wording match on the next sync links it as owned without asking.
+10. **Held changes.** Three kinds of change are never made without the user's OK; the planner puts them in
+    `plan.held` instead of `plan.ops`, and the dashboard shows them as *Waiting for your OK*:
+    - `first-write` — nothing is written to a chatbot until `approvedAt` is set. The held change carries a
+      preview (add / update / remove lines). State saved by older versions that already had links is treated
+      as approved.
+    - `adopt:<memoryId>:<remoteId>` — an unlinked chatbot entry says the same as a shareable memory. Nothing
+      is created or linked while waiting. Yes → linked with `owned: false`. No → left alone, and no copy is
+      added while it still matches.
+    - `delete:<remoteId>` — removing an entry that isn't owned. Yes → deleted. No → unlinked and left on the
+      chatbot (and not offered on Review).
+    Decisions are kept in `approved` / `declined` (bounded). `pendingChanges` doesn't count held changes, so
+    nothing re-syncs in a loop while it waits.
+11. **Activity and undo.** `applyResults` and the pull step append to `activity` (newest last, 100 per
+    chatbot): `added`, `updated`, `removed`, `linked`, `edited-there`, `removed-there`, `imported`.
+    `SyncService.undo` reverses one by changing the memory in OmniMemory (restore + reshare, revert the text,
+    stop sharing, unlink, or move to trash) and lets the next sync put the chatbot back in step.
+12. Chatbot sync is **off by default** (`siteSync` all false); turning it on for a chatbot starts a read so the
+    first-write preview appears straight away.
 
 ### Review: what the chatbots already know (`core/discover.ts`)
 
