@@ -1,0 +1,210 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/*
+ * Design tokens. Colours are semantic and switch as a set, so components never
+ * need per-theme classes. System preference is the default; an explicit
+ * data-theme on <html> overrides it.
+ */
+:root {
+  color-scheme: light;
+  --om-canvas: #fbfbfa;
+  --om-surface: #ffffff;
+  --om-subtle: #f4f4f2;
+  --om-muted: #ebebe8;
+  --om-line: #e7e6e2;
+  --om-line-strong: #d6d5d0;
+  --om-ink: #1c1c1a;
+  --om-ink-2: #62615c;
+  --om-ink-3: #94938d;
+  --om-accent: #1c1c1a;
+  --om-accent-hover: #33332f;
+  --om-accent-fg: #ffffff;
+  --om-focus: #2f6fed;
+  --om-danger: #c2362c;
+  --om-danger-solid: #c2362c;
+  --om-danger-soft: #fcefed;
+  --om-warn: #92580a;
+  --om-warn-soft: #fbf3df;
+  --om-ok: #2c7a4b;
+  --om-ok-soft: #e9f5ee;
+  --om-shadow: 0 1px 2px rgb(20 20 18 / 0.05), 0 8px 24px rgb(20 20 18 / 0.08);
+  --om-backdrop: rgb(20 20 18 / 0.32);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --om-canvas: #141413;
+    --om-surface: #1b1b1a;
+    --om-subtle: #232321;
+    --om-muted: #2c2c2a;
+    --om-line: #2b2b29;
+    --om-line-strong: #3d3d3a;
+    --om-ink: #ecece9;
+    --om-ink-2: #a5a49e;
+    --om-ink-3: #74736e;
+    --om-accent: #ecece9;
+    --om-accent-hover: #ffffff;
+    --om-accent-fg: #161615;
+    --om-focus: #6b9bff;
+    --om-danger: #f0766c;
+    --om-danger-solid: #c8443a;
+    --om-danger-soft: #3a1f1c;
+    --om-warn: #e2b155;
+    --om-warn-soft: #352a14;
+    --om-ok: #6cc48f;
+    --om-ok-soft: #1a2e22;
+    --om-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.45);
+    --om-backdrop: rgb(0 0 0 / 0.55);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --om-canvas: #141413;
+  --om-surface: #1b1b1a;
+  --om-subtle: #232321;
+  --om-muted: #2c2c2a;
+  --om-line: #2b2b29;
+  --om-line-strong: #3d3d3a;
+  --om-ink: #ecece9;
+  --om-ink-2: #a5a49e;
+  --om-ink-3: #74736e;
+  --om-accent: #ecece9;
+  --om-accent-hover: #ffffff;
+  --om-accent-fg: #161615;
+  --om-focus: #6b9bff;
+  --om-danger: #f0766c;
+  --om-danger-solid: #c8443a;
+  --om-danger-soft: #3a1f1c;
+  --om-warn: #e2b155;
+  --om-warn-soft: #352a14;
+  --om-ok: #6cc48f;
+  --om-ok-soft: #1a2e22;
+  --om-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.45);
+  --om-backdrop: rgb(0 0 0 / 0.55);
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-canvas: var(--om-canvas);
+  --color-surface: var(--om-surface);
+  --color-subtle: var(--om-subtle);
+  --color-muted: var(--om-muted);
+  --color-line: var(--om-line);
+  --color-line-strong: var(--om-line-strong);
+  --color-ink: var(--om-ink);
+  --color-ink-2: var(--om-ink-2);
+  --color-ink-3: var(--om-ink-3);
+  --color-accent: var(--om-accent);
+  --color-accent-hover: var(--om-accent-hover);
+  --color-accent-fg: var(--om-accent-fg);
+  --color-focus: var(--om-focus);
+  --color-danger: var(--om-danger);
+  --color-danger-solid: var(--om-danger-solid);
+  --color-danger-soft: var(--om-danger-soft);
+  --color-warn: var(--om-warn);
+  --color-warn-soft: var(--om-warn-soft);
+  --color-ok: var(--om-ok);
+  --color-ok-soft: var(--om-ok-soft);
+  --shadow-pop: var(--om-shadow);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss03';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    background: var(--om-canvas);
+    color: var(--om-ink);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* One consistent, visible focus style for keyboard users. */
+  :focus-visible {
+    outline: 2px solid var(--om-focus);
+    outline-offset: 2px;
+  }
+
+  button,
+  [role='switch'],
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  ::placeholder {
+    color: var(--om-ink-3);
+    opacity: 1;
+  }
+
+  /* We draw our own clear buttons. */
+  input[type='search']::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  dialog::backdrop {
+    background: var(--om-backdrop);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--om-focus) 24%, transparent);
+  }
+}
+
+@layer components {
+  /* Text fields share one look everywhere. */
+  .field {
+    width: 100%;
+    border: 1px solid var(--om-line-strong);
+    border-radius: 6px;
+    background: var(--om-surface);
+    color: var(--om-ink);
+    padding: 6px 9px;
+    font: inherit;
+    transition: border-color 120ms;
+  }
+  .field:hover {
+    border-color: var(--om-ink-3);
+  }
+  .field:focus-visible {
+    outline: 2px solid var(--om-focus);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--om-line-strong) transparent;
+  }
+}
+
+@keyframes om-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@utility animate-rise {
+  animation: om-rise 140ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
