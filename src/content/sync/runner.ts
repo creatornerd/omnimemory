@@ -2,12 +2,14 @@ import type { OpResult, RemoteSnapshot } from '../../core/sync';
 import type { SiteId } from '../../core/types';
 import { send } from '../bridge';
 import { chatgptSync } from './chatgpt';
+import { claudeSync } from './claude';
 import { geminiSync } from './gemini';
 import { wait } from './http';
 import type { MemorySyncAdapter } from './types';
 
 const ADAPTERS: Partial<Record<SiteId, MemorySyncAdapter>> = {
   chatgpt: chatgptSync,
+  claude: claudeSync,
   gemini: geminiSync,
 };
 

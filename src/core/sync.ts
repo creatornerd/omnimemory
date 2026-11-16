@@ -20,9 +20,10 @@ import { MAX_CONTENT_LENGTH, type Memory, type Settings, type SiteId } from './t
  *    Each OmniMemory memory maps to one entry.
  *
  *  - "block": one free-text field (ChatGPT → Personalization → Custom
- *    instructions → "More about you"). OmniMemory owns a clearly marked block
- *    inside that field, one line per memory, and leaves everything else the
- *    user wrote there untouched.
+ *    instructions → "More about you"; Claude → Settings → Your Claude →
+ *    Instructions). OmniMemory owns a clearly marked block inside that
+ *    field, one line per memory, and leaves everything else the user wrote
+ *    there untouched.
  *
  * Rules, in order:
  *  1. Only memories that may be shared with that chatbot right now are ever
@@ -35,7 +36,7 @@ import { MAX_CONTENT_LENGTH, type Memory, type Settings, type SiteId } from './t
  *     is brought back: edited → memory edited, removed → memory stops being
  *     shared with that chatbot. Anything else the chatbot remembers is never
  *     imported automatically; it goes to the Review checklist (discover.ts).
- *     (Exception: a line typed into OmniMemory's own ChatGPT block is taken
+ *     (Exception: a line typed into OmniMemory's own block is taken
  *     as a new memory, since it was put in OmniMemory's block on purpose.)
  *  5. Text that looks like a credential is never copied in either direction.
  */
@@ -46,18 +47,35 @@ export type SyncMode = 'items' | 'block';
 export const SYNC_MODES: Record<SiteId, SyncMode | null> = {
   gemini: 'items',
   chatgpt: 'block',
-  claude: null,
+  claude: 'block',
 };
 
 /** Where on the chatbot's side the synced memories live, for the UI. */
 export const SYNC_TARGETS: Record<SiteId, string> = {
   gemini: 'Settings → Instructions for Gemini',
   chatgpt: 'Settings → Personalization → Custom instructions → More about you',
-  claude: 'Claude memory',
+  claude: 'Settings → Your Claude → Instructions',
 };
+
+const SITE_NAMES: Record<SiteId, string> = { chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini' };
 
 /** ChatGPT's custom-instruction fields hold at most this many characters. */
 export const BLOCK_FIELD_LIMIT = 1500;
+
+/**
+ * Block mode: how long the whole field may be on each chatbot, and how much
+ * of it OmniMemory's block may use. Claude's instructions allow far more
+ * than ChatGPT's, but a huge block would crowd out the user's own text and
+ * every chat, so OmniMemory keeps to a modest share.
+ */
+export const BLOCK_LIMITS: Partial<Record<SiteId, { field: number; block: number }>> = {
+  chatgpt: { field: BLOCK_FIELD_LIMIT, block: BLOCK_FIELD_LIMIT },
+  claude: { field: 32_000, block: 6_000 },
+};
+
+function blockLimits(site: SiteId): { field: number; block: number } {
+  return BLOCK_LIMITS[site] ?? { field: BLOCK_FIELD_LIMIT, block: BLOCK_FIELD_LIMIT };
+}
 export const BLOCK_START = '[OmniMemory — edit these in the OmniMemory extension]';
 export const BLOCK_END = '[/OmniMemory]';
 
@@ -182,7 +200,7 @@ export type ActivityKind =
   | 'linked' // an entry the chatbot already had is now kept in sync
   | 'edited-there' // edited on the chatbot → memory edited
   | 'removed-there' // removed on the chatbot → memory no longer shared with it
-  | 'imported'; // typed into OmniMemory's ChatGPT block → new memory
+  | 'imported'; // typed into OmniMemory's block (ChatGPT, Claude) → new memory
 
 export interface ActivityEntry {
   id: string;
@@ -296,7 +314,7 @@ export function cleanLine(text: string): string {
     .trim();
 }
 
-/** One memory as a single line in the ChatGPT block. Never contains a marker. */
+/** One memory as a single line in a block. Never contains a marker. */
 export function blockLine(content: string): string {
   return cleanLine(content.replace(/\s*\n+\s*/g, '; '));
 }
@@ -362,12 +380,16 @@ export function repairContent(content: string): string | null {
 }
 
 /** The managed part of a block-mode snapshot, read from the raw field. */
-export function readBlockField(field: string): Pick<RemoteSnapshot, 'managed' | 'blockBudget' | 'needsRewrite'> & { outside: string } {
+export function readBlockField(
+  field: string,
+  site: SiteId = 'chatgpt',
+): Pick<RemoteSnapshot, 'managed' | 'blockBudget' | 'needsRewrite'> & { outside: string } {
   const { outside, lines, present } = parseBlock(field);
+  const limits = blockLimits(site);
   return {
     outside,
     managed: lines.map((text, index) => ({ id: `line-${index}`, text })),
-    blockBudget: BLOCK_FIELD_LIMIT - (outside ? outside.length + 2 : 0),
+    blockBudget: Math.max(0, Math.min(limits.block, limits.field - (outside ? outside.length + 2 : 0))),
     needsRewrite: present && composeBlockField(outside, lines) !== field,
   };
 }
@@ -563,7 +585,7 @@ function planBlock({ site, memories, settings, state, remote }: PlanInput): Plan
   const notes: string[] = [];
   const current = remote.managed.map((entry) => entry.text);
 
-  // 1. Work out what the user changed inside the block on ChatGPT's side,
+  // 1. Work out what the user changed inside the block on the chatbot's side,
   //    compared with what OmniMemory last wrote there.
   const unmatchedCurrent = current.filter((line) => !state.links.some((link) => sameMeaning(link.pushedText, line)));
   const removed = state.links.filter((link) => !current.some((line) => sameMeaning(line, link.pushedText)));
@@ -591,7 +613,8 @@ function planBlock({ site, memories, settings, state, remote }: PlanInput): Plan
   }
 
   // 2. The block OmniMemory wants, newest/most used first, within the limit.
-  const budget = remote.blockBudget ?? BLOCK_FIELD_LIMIT;
+  const limits = blockLimits(site);
+  const budget = Math.min(remote.blockBudget ?? limits.block, limits.block);
   const lines: { memoryId: string; text: string }[] = [];
   let used = BLOCK_START.length + BLOCK_END.length + 2;
   const leftOut: string[] = [];
@@ -614,7 +637,9 @@ function planBlock({ site, memories, settings, state, remote }: PlanInput): Plan
   if (leftOut.length > 0) {
     const n = leftOut.length;
     notes.push(
-      `${n} ${n === 1 ? 'memory doesn’t' : 'memories don’t'} fit in ChatGPT’s ${BLOCK_FIELD_LIMIT}-character limit, so ${n === 1 ? 'it was' : 'they were'} left out. The most recently used memories are kept.`,
+      site === 'chatgpt'
+        ? `${n} ${n === 1 ? 'memory doesn’t' : 'memories don’t'} fit in ChatGPT’s ${BLOCK_FIELD_LIMIT}-character limit, so ${n === 1 ? 'it was' : 'they were'} left out. The most recently used memories are kept.`
+        : `${n} ${n === 1 ? 'memory doesn’t' : 'memories don’t'} fit in the space OmniMemory uses in ${SITE_NAMES[site]}’s instructions (${limits.block.toLocaleString('en-US')} characters, less if your own instructions are long), so ${n === 1 ? 'it was' : 'they were'} left out. The most recently used memories are kept.`,
     );
   }
 

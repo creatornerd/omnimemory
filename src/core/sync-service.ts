@@ -34,7 +34,7 @@ const LOCK_MS = 2 * 60 * 1000;
 const MANAGED_GROUP: Record<SiteId, string> = {
   gemini: 'Instructions for Gemini',
   chatgpt: 'Custom instructions · OmniMemory block',
-  claude: 'Claude memory',
+  claude: 'Instructions · OmniMemory block',
 };
 
 export interface SyncStatus {
@@ -310,7 +310,7 @@ export class SyncService {
     for (const entry of state.snapshot?.entries ?? []) {
       if (entry.memoryId) continue;
       if (entry.group === managedGroup) {
-        // ChatGPT block lines are OmniMemory's own; only Gemini's entries count.
+        // Block lines (ChatGPT, Claude) are OmniMemory's own; only Gemini's entries count.
         if (itemsMode) sources.push({ group: entry.group, text: entry.text, remoteId: entry.id, whole: true });
         continue;
       }
@@ -318,7 +318,7 @@ export class SyncService {
         group: entry.group,
         title: entry.title,
         text: entry.text,
-        whole: entry.title === 'How ChatGPT should respond',
+        whole: entry.title === 'How ChatGPT should respond' || entry.title === 'Instructions for Claude',
       });
     }
     return sources;

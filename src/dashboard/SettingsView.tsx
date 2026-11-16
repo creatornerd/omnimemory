@@ -187,8 +187,8 @@ export function SettingsView({ store }: { store: Store }) {
           <ul className="max-w-xl list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-ink-2">
             <li>
               There is no OmniMemory account, server, analytics or telemetry. The only network requests are
-              chatbot memory sync, which talks to ChatGPT and Gemini themselves, with your normal sign-in on
-              those sites. You can turn it off per chatbot under Chatbot memory.
+              chatbot memory sync, which talks to ChatGPT, Claude and Gemini themselves, with your normal
+              sign-in on those sites. You can turn it off per chatbot under Chatbot memory.
             </li>
             <li>
               Chatbot pages can only receive memories you have shared with that chatbot, and only when you
@@ -196,11 +196,19 @@ export function SettingsView({ store }: { store: Store }) {
             </li>
             <li>
               With sync on, memories shared with a chatbot are written to that chatbot’s own memory
-              (Gemini’s Instructions, ChatGPT’s custom instructions), and removed again when you delete
+              (Gemini’s Instructions, ChatGPT’s custom instructions, Claude’s Instructions), and removed again when you delete
               or stop sharing them.
             </li>
             <li>Text that looks like a password, key or card number is refused when saving from a page.</li>
           </ul>
+        </Section>
+
+        <Section title="Help">
+          <Row label="Welcome tour" hint="A quick walk through saving memories, sharing, and chatbot sync.">
+            <Button size="sm" onClick={() => (window.location.hash = '/welcome')}>
+              Take the tour again
+            </Button>
+          </Row>
         </Section>
       </div>
 

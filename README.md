@@ -8,8 +8,8 @@ hide and delete everything it stores.
 - **Local-first.** Memories live in IndexedDB inside this browser profile. There is no OmniMemory account,
   server, paid API or analytics. The extension's own pages are locked down with `connect-src 'none'`.
 - **Kept in step with each chatbot's own memory.** Memories you share with Gemini are kept in Gemini's
-  *Instructions for Gemini*; memories you share with ChatGPT are kept in a marked block in ChatGPT's custom
-  instructions. Add, edit or delete one in OmniMemory and the chatbot is updated; change it on the chatbot
+  *Instructions for Gemini*; memories you share with ChatGPT or Claude are kept in a marked block in
+  ChatGPT's custom instructions or Claude's *Instructions*. Add, edit or delete one in OmniMemory and the chatbot is updated; change it on the chatbot
   and OmniMemory picks that up. The dashboard's **Chatbot memory** page shows what each chatbot currently
   remembers, and has an on/off switch per chatbot. This is the only network traffic, and it goes only to
   that chatbot's own site, using your normal sign-in.
@@ -17,18 +17,27 @@ hide and delete everything it stores.
   time it shows exactly what it would add before writing anything. OmniMemory remembers which chatbot
   entries it created: if a chatbot already had something that matches one of your memories, it asks before
   linking it, and it never removes an entry the chatbot had first without asking. Anything waiting for your OK
-  shows on the toolbar icon (amber) and in the popup.
+  shows on the toolbar icon (amber) and in the popup. **Approve all N for ChatGPT/Claude/Gemini** answers
+  everything for one chatbot in one click, and on the Review page **Keep all** keeps everything found on one
+  chatbot; you can still go through them one by one.
 - **Every change is logged and can be undone.** Each chatbot's card has a **Recent activity** feed — added,
   updated, removed, linked, edited on the chatbot — with one-click undo (**Put back**, **Change back**,
   **Take off**, **Unlink**…).
 - **Review what your chatbots already know.** Every sync also digs through what each chatbot remembers —
-  Gemini's instructions, ChatGPT's AI-written memory summary, saved memories and custom instructions — and
+  Gemini's instructions, ChatGPT's and Claude's AI-written memory summaries, saved memories and custom
+  instructions — and
   lists anything OmniMemory doesn't have yet on the dashboard's **Review** page, rephrased as short notes
   ("You program VEX robots" → "I program VEX robots"). Tick what you want, reword anything, press
   **Keep and sync**, and those become memories that sync to your other chatbots. Nothing is imported
   without your say-so; the toolbar icon and popup show how many are waiting.
 - **You stay in control.** Every memory has its own sharing switches per chatbot plus "keep private".
   You can also pause sharing everywhere or for one chatbot.
+- **A welcome tour that shows, not tells.** On first install the dashboard opens with a short tour of animated
+  demos: a pretend cursor saves a note from the toolbar, saves a sentence from a web page, inserts memories
+  into a chat, flips a memory's sharing switches, and approves a first sync into Claude's instructions. The
+  last steps have a switch per chatbot to turn on sync right there (still previewed before anything is
+  written). With "reduce motion" on, each demo shows its end state instead. **Settings → Help → Take the
+  tour again** brings it back.
 - **No message is ever sent for you.** Context goes into the message box only when you press
   **Insert context**. If insertion fails, the context is copied to your clipboard instead.
 
@@ -51,6 +60,9 @@ npm run build
 3. Click **Load unpacked** and choose the `dist` folder in this project.
 4. Pin OmniMemory from the puzzle-piece menu so its icon is always visible.
 
+On a fresh install the dashboard opens with the welcome tour. (Reloading an unpacked extension doesn't count as
+a fresh install; open `dashboard.html#/welcome` or use **Settings → Take the tour again** to see it.)
+
 After changing the code, run `npm run build` again and click the reload ↻ button on the extension's card.
 Reload any open chatbot tabs too, because they keep running the old content script until you do.
 
@@ -64,7 +76,7 @@ Reload any open chatbot tabs too, because they keep running the old content scri
 npm test
 ```
 
-There are 151 tests in 11 files. They run the real IndexedDB storage layer (using `fake-indexeddb`) and the
+There are 156 tests in 11 files. They run the real IndexedDB storage layer (using `fake-indexeddb`) and the
 same message router the content scripts talk to, so they cover the parts that decide what a chatbot can see.
 
 | File | What it covers |
@@ -77,7 +89,7 @@ same message router the content scripts talk to, so they cover the parts that de
 | `tests/import-export.test.ts` | Export format, round-trip import, plain-text/JSON import, review rules, context building |
 | `tests/insert.test.ts` | How text gets into the message box: textarea, paste, `execCommand`, fallthrough, failure leading to Copy |
 | `tests/permissions.test.ts` | Sharing rules and global/per-site pause |
-| `tests/sync.test.ts` | Chatbot memory sync against fake Gemini and ChatGPT that behave like the real ones: add/edit/delete/restore, edits and removals made on the chatbot coming back, no duplicates, credentials never copied, pause and per-chatbot switch, refused writes, one tab at a time, ChatGPT's 1,500-character limit, parsing replies captured from the real sites, off by default and first-write preview, asking before linking or removing an entry the chatbot had first, the activity log and undo |
+| `tests/sync.test.ts` | Chatbot memory sync against fake Gemini, ChatGPT and Claude that behave like the real ones: add/edit/delete/restore, edits and removals made on the chatbot coming back, no duplicates, credentials never copied, pause and per-chatbot switch, refused writes, one tab at a time, ChatGPT's 1,500-character limit and Claude's 6,000-character block, parsing replies captured from the real sites, off by default and first-write preview, asking before linking or removing an entry the chatbot had first, the activity log and undo |
 | `tests/discover.test.ts` | The Review checklist: splitting and rephrasing what chatbots remember, skipping what you already have and credentials, conflict flags, keep (with edits) / skip / bring back skipped, a kept Gemini entry not being added twice |
 | `tests/no-network.test.ts` | Only one file may make requests and only to the chatbot site itself, no HTML injection, minimal manifest permissions |
 
@@ -111,9 +123,9 @@ These steps follow the acceptance criteria. You need to be signed in to at least
 
 ### Testing chatbot memory sync
 
-Be signed in to ChatGPT and Gemini in the Chrome profile where OmniMemory is installed.
+Be signed in to ChatGPT, Claude and Gemini in the Chrome profile where OmniMemory is installed.
 
-1. Open the dashboard → **Chatbot memory** and turn **Keep in sync** on for ChatGPT and Gemini (it's off
+1. Open the dashboard → **Chatbot memory** and turn **Keep in sync** on for ChatGPT, Claude and Gemini (it's off
    for new installs). OmniMemory reads each chatbot, then shows **Waiting for your OK** with a preview of
    what it would add. Nothing has been written yet. Press **Looks good, start syncing**.
 2. Save a memory in the popup, e.g. `I program VEX robots using PROS and LemLib`. Within a few seconds
@@ -123,6 +135,7 @@ Be signed in to ChatGPT and Gemini in the Chrome profile where OmniMemory is ins
 4. Check ChatGPT: Settings → Personalization → Custom instructions → **More about you** shows a block
    starting `[OmniMemory — edit these in the OmniMemory extension]` with the memory on its own line.
    Anything else you wrote in that field is kept.
+   Claude: Settings → Your Claude → **Instructions** shows the same block after anything you wrote there.
 5. Back on **Chatbot memory**, both cards say **In sync** and list what each chatbot remembers, including
    ChatGPT's own AI-written *Memory summary* (shown read-only, with **Add to OmniMemory**).
 6. Edit the memory in OmniMemory → both chatbots show the new wording. Turn off its Gemini dot → it's removed
@@ -145,7 +158,8 @@ Be signed in to ChatGPT and Gemini in the Chrome profile where OmniMemory is ins
    background** to sync only while you have the chatbot open.
 
 To watch the requests: open DevTools on the chatbot tab → Network. You'll see calls to that same site only
-(`chatgpt.com/backend-api/user_system_messages`, `gemini.google.com/_/BardChatUi/data/batchexecute`).
+(`chatgpt.com/backend-api/user_system_messages`, `claude.ai/api/account_profile`,
+`gemini.google.com/_/BardChatUi/data/batchexecute`).
 
 Other things worth trying:
 
@@ -276,8 +290,13 @@ and AI-assisted extraction would be added.
   (checked against the live sites on 2026-11-14). A site update can break this; when it does, the dashboard
   shows an error and everything else keeps working. Some chatbots may also consider this kind of automation
   against their terms; you can turn sync off at any time.
-- **Claude sync isn't available yet.** Claude's memory settings need a signed-in session to map, which hasn't
-  been done. The on-page button and Insert context work on Claude as before.
+- **Claude sync writes to Instructions, not to Claude's Memory.** Claude's Memory is written by Claude from your
+  chats and changed by asking it in words, with no way to add or remove one entry, so OmniMemory only reads it
+  (for the dashboard and Review). The write (`PUT /api/account_profile`) was checked against a real account on
+  2026-11-15: it changes only the Instructions field and shows up in Claude's settings. A Claude tab that was
+  already open keeps showing the old Instructions until you reload it, and saving from that stale page would
+  overwrite OmniMemory's block (OmniMemory then treats it as an edit made on Claude). OmniMemory's block in
+  Claude's instructions is capped at 6,000 characters.
 - **ChatGPT's custom instructions hold 1,500 characters.** If your shared memories don't all fit, the most
   recently used ones are kept and the dashboard says how many were left out. ChatGPT's Memory summary is
   rewritten by ChatGPT from your chats, so OmniMemory shows it but doesn't write to it.
@@ -290,7 +309,6 @@ and AI-assisted extraction would be added.
 
 ## Future improvements
 
-- Claude memory sync, once its settings requests are mapped.
 - Optional sync between devices through Supabase or another backend behind the existing `StorageBackend`
   interface ([design](docs/ARCHITECTURE.md#optional-sync-supabase)).
 - An MCP server exposing `memory_search`, `memory_save`, `memory_update` and `memory_delete` for chat apps that

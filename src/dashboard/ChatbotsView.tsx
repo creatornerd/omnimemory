@@ -12,8 +12,9 @@ import {
   type SyncLink,
 } from '../core';
 import { ActivityFeed, Approvals } from './SyncPanels';
+import { requestSync } from './sync-actions';
 import { onChange } from '../shared/change-bus';
-import { getSyncService, isExtension } from '../shared/platform';
+import { getSyncService } from '../shared/platform';
 import { SITES } from '../shared/sites';
 import { useFound } from '../ui/hooks/useFound';
 import { Badge, Button, Notice, Toggle } from '../ui/components/primitives';
@@ -41,18 +42,6 @@ function useSyncStates(): States {
     };
   }, [load]);
   return states;
-}
-
-async function requestSync(site: SiteId): Promise<string> {
-  if (!isExtension()) throw new Error('Syncing only works in the installed extension.');
-  const response = (await chrome.runtime.sendMessage({ type: 'omni/sync-run', site })) as
-    | { ok: true; data: 'tab' | 'background' | 'none' }
-    | { ok: false; error: string }
-    | undefined;
-  if (!response?.ok) throw new Error(response?.error ?? 'Could not start a sync.');
-  return response.data === 'background'
-    ? `Opening ${SITES[site].label} in a background tab to sync…`
-    : `Syncing with ${SITES[site].label}…`;
 }
 
 function StatusLine({ site, state, store }: { site: SiteId; state: SiteSyncState | undefined; store: Store }) {
@@ -191,6 +180,8 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
               Your memories that are shared with {info.label} are kept in {SYNC_TARGETS[site]}.
               {site === 'chatgpt' &&
                 ' ChatGPT reads custom instructions when a new chat starts, so changes show up in new chats, not ones already open. They don’t appear in ChatGPT’s own Memory summary, which ChatGPT writes from your chats; it’s shown here but OmniMemory doesn’t change it.'}
+              {site === 'claude' &&
+                ' OmniMemory adds a marked block after anything you wrote there yourself, which Claude keeps in mind in every chat. Claude’s own Memory is written by Claude from your chats and changed by asking it in words, so it’s shown here but OmniMemory doesn’t change it.'}
             </p>
             {state && blocked === null && (
               <Approvals

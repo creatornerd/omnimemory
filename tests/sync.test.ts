@@ -14,6 +14,7 @@ import {
 import type { SiteId } from '../src/core/types';
 import { parseBatchResponse } from '../src/content/sync/gemini';
 import { parseSummaryStream } from '../src/content/sync/chatgpt';
+import { CLAUDE_SUMMARY_GROUP, splitClaudeMemory } from '../src/content/sync/claude';
 import { parseRequest, parseRequestWithReason } from '../src/shared/messages';
 import { createHarness, createSyncHarness } from './helpers';
 
@@ -93,6 +94,33 @@ async function sync(h: Harness, site: SiteId, remote: FakeRemote) {
   await h.ask(site, { type: 'sync/commit', planId: begin.planId, results, after: remote.snapshot() });
   await h.ask(site, { type: 'sync/done' });
   return { begin, ops: begin.ops };
+}
+
+/** Behaves like Claude's Settings → Your Claude → Instructions field. */
+class FakeClaude implements FakeRemote {
+  constructor(
+    public field = '',
+    public summary = '',
+  ) {}
+  snapshot(): RemoteSnapshot {
+    const { outside, managed, blockBudget, needsRewrite } = readBlockField(this.field, 'claude');
+    const readOnly = splitClaudeMemory(this.summary).map((section, index) => ({
+      id: `summary-${index}`,
+      group: CLAUDE_SUMMARY_GROUP,
+      title: section.title || undefined,
+      text: section.text,
+    }));
+    if (outside) readOnly.unshift({ id: 'instructions', group: 'Instructions', title: 'Instructions for Claude', text: outside });
+    return { managed, readOnly, blockBudget, needsRewrite };
+  }
+  apply(op: SyncOp): OpResult {
+    if (op.op !== 'set-block') return { ok: false, error: 'unsupported' };
+    this.field = composeBlockField(parseBlock(this.field).outside, op.lines.map((line) => line.text));
+    return { ok: true };
+  }
+  lines(): string[] {
+    return parseBlock(this.field).lines;
+  }
 }
 
 async function pending(h: Harness, site: SiteId) {
@@ -348,6 +376,73 @@ describe('ChatGPT (custom instructions block)', () => {
     expect(chatgpt.lines().length).toBeLessThan(10);
     expect((await h.sync.state('chatgpt')).notes[0]).toMatch(/don’t fit/);
     expect(await pending(h, 'chatgpt')).toBe(0);
+  });
+});
+
+describe('Claude (instructions block)', () => {
+  it('previews first, then writes a marked block after the user’s own instructions', async () => {
+    const h = createHarness();
+    const claude = new FakeClaude('Keep answers short.');
+    await h.service.create({ content: 'I program VEX robots' });
+    await h.service.create({ content: 'Not for Claude', permissions: { claude: false } });
+
+    await h.enableSync(['claude'], false);
+    expect((await sync(h, 'claude', claude)).ops).toEqual([]);
+    expect(claude.field).toBe('Keep answers short.');
+    const [preview] = (await h.sync.state('claude')).held;
+    expect(preview).toMatchObject({ kind: 'first-write', preview: [{ action: 'add', text: 'I program VEX robots' }] });
+
+    await h.sync.decide('claude', preview.key, true);
+    await sync(h, 'claude', claude);
+    expect(claude.field).toBe(`Keep answers short.\n\n${BLOCK_START}\n- I program VEX robots\n${BLOCK_END}`);
+    expect(await pending(h, 'claude')).toBe(0);
+    expect((await sync(h, 'claude', claude)).ops).toEqual([]);
+  });
+
+  it('keeps line edits and removals made on Claude, like ChatGPT', async () => {
+    const h = createHarness();
+    await h.enableSync(['claude']);
+    const claude = new FakeClaude();
+    const tea = await h.service.create({ content: 'I like tea' });
+    await sync(h, 'claude', claude);
+    claude.field = composeBlockField('', ['I like green tea']);
+    await sync(h, 'claude', claude);
+    expect((await h.service.get(tea.id))?.content).toBe('I like green tea');
+    claude.field = '';
+    await sync(h, 'claude', claude);
+    expect((await h.service.get(tea.id))?.permissions.claude).toBe(false);
+  });
+
+  it('uses a modest share of Claude’s much larger field', async () => {
+    const h = createHarness();
+    await h.enableSync(['claude']);
+    const claude = new FakeClaude();
+    for (let i = 0; i < 80; i += 1) await h.service.create({ content: `Memory number ${i} ${'z'.repeat(100)}` });
+    await sync(h, 'claude', claude);
+    expect(claude.field.length).toBeGreaterThan(1500);
+    expect(claude.field.length).toBeLessThanOrEqual(6000);
+    expect((await h.sync.state('claude')).notes[0]).toMatch(/Claude’s instructions/);
+    expect(await pending(h, 'claude')).toBe(0);
+  });
+
+  it('offers what Claude’s own memory knows on the Review page, in the first person', async () => {
+    const h = createHarness();
+    await h.enableSync(['claude']);
+    const claude = new FakeClaude('', '**Work context**\nThe user builds VEX robots for a school team.\n\n**Personal**\nThe user is learning the cello.');
+    await sync(h, 'claude', claude);
+    const found = (await h.sync.allFound()).filter((item) => item.site === 'claude').map((item) => item.text);
+    expect(found).toEqual(['I build VEX robots for a school team.', 'I am learning the cello.']);
+    const groups = (await h.sync.state('claude')).snapshot?.entries.map((e) => e.group);
+    expect(groups).toContain(CLAUDE_SUMMARY_GROUP);
+  });
+
+  it('splits Claude’s memory summary into titled sections', () => {
+    expect(splitClaudeMemory('')).toEqual([]);
+    expect(splitClaudeMemory('## Work\nBuilds robots.\n\n**Interests:**\n- Cello\n- Chess')).toEqual([
+      { title: 'Work', text: 'Builds robots.' },
+      { title: 'Interests', text: '- Cello\n- Chess' },
+    ]);
+    expect(splitClaudeMemory('No headings here.')).toEqual([{ title: '', text: 'No headings here.' }]);
   });
 });
 

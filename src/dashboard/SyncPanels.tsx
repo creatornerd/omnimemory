@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link2, Minus, Pencil, Plus, ShieldCheck, Undo2, UserPen, UserX, Download } from 'lucide-react';
+import { CheckCheck, Link2, Minus, Pencil, Plus, ShieldCheck, Undo2, UserPen, UserX, Download } from 'lucide-react';
 import type { ActivityEntry, ActivityKind, HeldChange, SiteId } from '../core';
 import { getSyncService } from '../shared/platform';
 import { SITES } from '../shared/sites';
@@ -56,7 +56,10 @@ export function Approvals({
     setBusy(true);
     try {
       await getSyncService().approveAll(site);
+      toast(`Approved ${held.length} changes for ${label}. Syncing…`);
       onAnswered();
+    } catch (error) {
+      toast((error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -64,16 +67,28 @@ export function Approvals({
 
   return (
     <div className="mt-3 rounded-lg border border-warn/40 bg-warn-soft/60 p-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <ShieldCheck size={14} className="text-warn" />
         <h3 className="text-[13px] font-semibold">Waiting for your OK</h3>
         <span className="text-xs text-ink-3">{held.length}</span>
         {held.length > 1 && (
-          <Button size="sm" variant="ghost" className="ml-auto" disabled={busy} onClick={() => void approveAll()}>
-            Approve all
+          <Button
+            size="sm"
+            variant="primary"
+            className="ml-auto"
+            icon={<CheckCheck size={13} />}
+            disabled={busy}
+            onClick={() => void approveAll()}
+          >
+            Approve all {held.length} for {label}
           </Button>
         )}
       </div>
+      {held.length > 1 && (
+        <p className="mt-1 text-xs leading-relaxed text-ink-3">
+          Look through them below if you’d like to decide one by one.
+        </p>
+      )}
       <ul className="mt-2 space-y-3">
         {held.map((change) => (
           <li key={change.key} className="rounded-md bg-surface/70 p-2.5">

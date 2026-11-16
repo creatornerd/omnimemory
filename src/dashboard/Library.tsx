@@ -48,9 +48,11 @@ function matchesSharing(memory: Memory, filter: SharingFilter): boolean {
 interface LibraryProps {
   store: Store;
   category: Category | 'all';
+  /** Bumped to open the new-memory form. */
+  createRequest?: number;
 }
 
-export function Library({ store, category }: LibraryProps) {
+export function Library({ store, category, createRequest = 0 }: LibraryProps) {
   const { service, library, settings, loading } = store;
   const toast = useToast();
 
@@ -64,6 +66,10 @@ export function Library({ store, category }: LibraryProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // The welcome tour's "Add your first memory" opens the new-memory form.
+  useEffect(() => {
+    if (createRequest > 0) setCreating(true);
+  }, [createRequest]);
   const [deleting, setDeleting] = useState<Memory[] | null>(null);
   const [merging, setMerging] = useState<Memory[] | null>(null);
 

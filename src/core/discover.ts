@@ -130,7 +130,7 @@ export function candidatesFrom(source: DiscoverySource): string[] {
   // Whole entries were saved on purpose, however short.
   if (source.whole) return [text];
 
-  const firstPerson = /summary|saved memor/i.test(source.group);
+  const firstPerson = /summary|saved memor|written by/i.test(source.group);
   return splitSentences(text)
     .map((sentence) => (firstPerson ? toFirstPerson(sentence) : sentence))
     .filter((sentence) => wordCount(sentence) >= MIN_WORDS);

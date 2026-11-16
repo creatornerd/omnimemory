@@ -15,6 +15,7 @@ import { ReviewView } from './ReviewView';
 import { Library } from './Library';
 import { SettingsView } from './SettingsView';
 import { Trash } from './Trash';
+import { Welcome } from './Welcome';
 
 function viewFromHash(): DashboardView {
   const view = window.location.hash.replace(/^#\/?/, '');
@@ -55,9 +56,15 @@ export function Dashboard() {
   const [view, setView] = useState<DashboardView>(viewFromHash);
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [captured, setCaptured] = useState<string | null>(null);
+  // Opened at #/welcome right after install, or from Settings.
+  const [welcome, setWelcome] = useState(() => window.location.hash.replace(/^#\/?/, '') === 'welcome');
+  const [createRequest, setCreateRequest] = useState(0);
 
   useEffect(() => {
-    const onHash = () => setView(viewFromHash());
+    const onHash = () => {
+      setView(viewFromHash());
+      if (window.location.hash.replace(/^#\/?/, '') === 'welcome') setWelcome(true);
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -143,12 +150,25 @@ export function Dashboard() {
       </nav>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {view === 'library' && <Library store={store} category={category} />}
+        {view === 'library' && <Library store={store} category={category} createRequest={createRequest} />}
         {view === 'review' && <ReviewView store={store} />}
         {view === 'chatbots' && <ChatbotsView store={store} />}
         {view === 'trash' && <Trash store={store} />}
         {view === 'settings' && <SettingsView store={store} />}
       </main>
+
+      <Welcome
+        open={welcome}
+        store={store}
+        onClose={() => {
+          setWelcome(false);
+          if (window.location.hash.replace(/^#\/?/, '') === 'welcome') go('library');
+        }}
+        onAddMemory={() => {
+          go('library');
+          setCreateRequest((count) => count + 1);
+        }}
+      />
 
       <Dialog open={captured !== null} onClose={() => setCaptured(null)} title="Review before saving">
         {captured !== null && (

@@ -24,7 +24,12 @@ export function Dialog({ open, onClose, title, children, footer, width = 'md' }:
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // showModal focuses the first control (the close button); prefer the
+      // one marked as the main action so Enter does the expected thing.
+      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
@@ -83,7 +88,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel, danger, onC
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>
-          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} autoFocus>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} data-autofocus>
             {confirmLabel}
           </Button>
         </>

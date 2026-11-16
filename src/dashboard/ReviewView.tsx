@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCheck, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 import { SITE_IDS, SYNC_MODES, syncBlocked, type FoundItem, type SiteId } from '../core';
 import { getSyncService, isExtension } from '../shared/platform';
 import { SITES } from '../shared/sites';
@@ -129,6 +129,23 @@ export function ReviewView({ store }: { store: Store }) {
   const skipCount = found.length - keepCount;
   const textOf = (item: FoundItem) => edits[item.id] ?? item.text;
 
+  /** Keep every item from one chatbot as it stands (with any rewording). */
+  async function keepAllFrom(site: SiteId, items: FoundItem[]) {
+    setBusy(true);
+    try {
+      const keep = items.map((item) => ({ id: item.id, text: textOf(item) })).filter((item) => item.text.trim());
+      const result = await getSyncService().review(keep, []);
+      setUnchecked((current) => new Set([...current].filter((id) => !items.some((item) => item.id === id))));
+      const parts = [`Kept ${plural(result.added, 'memory', 'memories')} from ${SITES[site].label}`];
+      if (result.refused.length > 0) parts.push(`${result.refused.length} skipped because it looks like a password or key`);
+      toast(parts.join('. '));
+    } catch (error) {
+      toast((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function apply() {
     setBusy(true);
     try {
@@ -220,6 +237,14 @@ export function ReviewView({ store }: { store: Store }) {
                   >
                     {allOn ? 'Untick all' : 'Tick all'}
                   </button>
+                  <Button
+                    size="sm"
+                    icon={<CheckCheck size={13} />}
+                    disabled={busy}
+                    onClick={() => void keepAllFrom(site, items)}
+                  >
+                    Keep all {items.length}
+                  </Button>
                 </div>
                 <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
                   {items.map((item) => (

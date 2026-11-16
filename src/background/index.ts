@@ -7,6 +7,7 @@ import { closeStaleBackgroundTabs, finishBackgroundTab, scheduleSync, syncSite, 
 /**
  * Service worker. It owns nothing but wiring:
  *  - answers content-script requests through the validated router;
+ *  - opens the welcome tour after a fresh install;
  *  - offers "Save to OmniMemory" on the right-click menu for selected text;
  *  - clears out trash older than 30 days;
  *  - decides when each chatbot's own memory needs syncing (the requests to
@@ -17,7 +18,11 @@ import { closeStaleBackgroundTabs, finishBackgroundTab, scheduleSync, syncSite, 
 
 const MENU_ID = 'omnimemory-save-selection';
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+  // First install: open the dashboard with the welcome tour.
+  if (details.reason === 'install') {
+    void chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#/welcome') });
+  }
   chrome.contextMenus.create({
     id: MENU_ID,
     title: 'Save selection to OmniMemory…',
