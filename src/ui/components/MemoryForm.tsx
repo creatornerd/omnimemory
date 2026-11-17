@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ShieldAlert, TriangleAlert } from 'lucide-react';
+import { ShieldAlert, Sparkles, TriangleAlert } from 'lucide-react';
 import {
   CATEGORIES,
   MAX_CONTENT_LENGTH,
@@ -8,10 +8,12 @@ import {
   findSimilar,
   type Category,
   type Memory,
+  type RepeatMatch,
   type SiteId,
   type SitePermissions,
 } from '../../core';
 import { Button, Notice, Select } from './primitives';
+import { useToast } from './Toast';
 import { SiteToggles } from './SiteToggles';
 import { cx } from '../format';
 
@@ -36,6 +38,11 @@ interface MemoryFormProps {
   compact?: boolean;
   onSubmit: (values: MemoryFormValues) => Promise<void> | void;
   onCancel: () => void;
+  /**
+   * AI repeat check, run when saving (only when the AI assistant is on).
+   * Rewordings the text rules miss are shown before anything is saved.
+   */
+  checkRepeats?: (text: string) => Promise<RepeatMatch[]>;
   children?: ReactNode;
 }
 
@@ -57,8 +64,12 @@ export function MemoryForm({
   compact,
   onSubmit,
   onCancel,
+  checkRepeats,
   children,
 }: MemoryFormProps) {
+  const toast = useToast();
+  const [aiChecked, setAiChecked] = useState<{ text: string; matches: RepeatMatch[] } | null>(null);
+  const [checking, setChecking] = useState(false);
   const [content, setContent] = useState(initial?.content ?? '');
   const [category, setCategory] = useState<Category | ''>(initial?.category ?? '');
   const [tagText, setTagText] = useState((initial?.tags ?? []).join(', '));
@@ -96,10 +107,31 @@ export function MemoryForm({
 
   const tooLong = trimmed.length > MAX_CONTENT_LENGTH;
   const blocked = sensitive.length > 0 && !allowSensitive;
-  const canSave = trimmed.length > 0 && !tooLong && !blocked && !saving;
+  const canSave = trimmed.length > 0 && !tooLong && !blocked && !saving && !checking;
+  const aiMatches = aiChecked?.text === trimmed ? aiChecked.matches : [];
+  const warned = similar.length > 0 || aiMatches.length > 0;
+
+  /** Ask the AI once per wording; true when it found something to show first. */
+  async function aiFoundRepeats(): Promise<boolean> {
+    if (!checkRepeats || similar.length > 0 || aiChecked?.text === trimmed) return false;
+    if (trimmed === (initial?.content ?? '').trim()) return false;
+    setChecking(true);
+    try {
+      const matches = await checkRepeats(trimmed);
+      setAiChecked({ text: trimmed, matches });
+      return matches.length > 0;
+    } catch (cause) {
+      // Never block saving on the AI: say so and carry on.
+      toast(`${cause instanceof Error ? cause.message : 'The AI check didn’t work.'} Saved without it.`);
+      return false;
+    } finally {
+      setChecking(false);
+    }
+  }
 
   async function submit() {
     if (!canSave) return;
+    if (await aiFoundRepeats()) return;
     setSaving(true);
     setError('');
     try {
@@ -176,6 +208,15 @@ export function MemoryForm({
         </Notice>
       ))}
 
+      {aiMatches.map((match) => (
+        <Notice key={match.memory.id} icon={<Sparkles size={14} />}>
+          <span className="font-medium">
+            {match.kind === 'duplicate' ? 'You already have this.' : 'This may contradict a memory.'}
+          </span>{' '}
+          “{truncate(match.memory.content)}”{match.reason ? ` — ${match.reason}` : ''}. Saving keeps both.
+        </Notice>
+      ))}
+
       <div className={cx('flex flex-wrap items-center gap-2', compact && 'gap-y-2')}>
         <Select
           aria-label="Category"
@@ -219,7 +260,7 @@ export function MemoryForm({
           {editingId ? 'Discard' : 'Cancel'}
         </Button>
         <Button size="sm" variant="primary" type="submit" disabled={!canSave}>
-          {similar.length > 0 && !editingId ? 'Save anyway' : submitLabel}
+          {checking ? 'Checking for repeats…' : warned && (!editingId || aiMatches.length > 0) ? 'Save anyway' : submitLabel}
         </Button>
       </div>
     </form>

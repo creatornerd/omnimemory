@@ -132,7 +132,7 @@ const STEPS: Step[] = [
             You see what it would change first. One click approves everything for that chatbot.
           </Point>
           <Point icon={<Undo2 size={14} />} title="Every change can be undone">
-            Chatbot memory in the sidebar lists what changed, with an undo button for each one.
+            Chatbots in the sidebar lists what changed, with an undo button for each one.
           </Point>
         </ul>
       </>
@@ -148,7 +148,7 @@ const STEPS: Step[] = [
         </p>
         <SyncChoices store={store} />
         <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
-          Be signed in to each chatbot in this browser. You can change this any time under Chatbot memory.
+          Be signed in to each chatbot in this browser. You can change this any time under Chatbots.
         </p>
       </>
     ),
@@ -165,8 +165,8 @@ const STEPS: Step[] = [
           <p className="mx-auto mt-3 max-w-sm text-[13px] leading-relaxed text-ink-2">
             Start by adding a few things you’d like every chatbot to know.
             {syncing.length > 0
-              ? ` Then open Chatbot memory to see what OmniMemory plans to write to ${syncing.map((site) => SITES[site].label).join(', ')} and approve it.`
-              : ' You can turn on syncing later under Chatbot memory.'}
+              ? ` Then open Chatbots to see what OmniMemory plans to write to ${syncing.map((site) => SITES[site].label).join(', ')} and approve it.`
+              : ' You can turn on syncing later under Chatbots.'}
           </p>
         </div>
       );

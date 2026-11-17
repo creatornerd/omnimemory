@@ -18,6 +18,9 @@ export interface StorageBackend {
   /** Bookkeeping for keeping a chatbot's own memory in step (core/sync.ts). */
   getSyncState(site: SiteId): Promise<SiteSyncState | undefined>;
   putSyncState(state: SiteSyncState): Promise<void>;
+  /** Small secrets (the Gemini API key). Never exported, never sent to a page. */
+  getSecret(name: string): Promise<string | undefined>;
+  putSecret(name: string, value: string | null): Promise<void>;
 }
 
 /** Volatile backend used by tests and as a reference implementation. */
@@ -25,6 +28,7 @@ export class InMemoryBackend implements StorageBackend {
   private memories = new Map<string, Memory>();
   private settings: Settings | undefined;
   private sync = new Map<SiteId, SiteSyncState>();
+  private secrets = new Map<string, string>();
 
   async getAllMemories(): Promise<Memory[]> {
     return [...this.memories.values()].map((m) => structuredClone(m));
@@ -58,5 +62,14 @@ export class InMemoryBackend implements StorageBackend {
 
   async putSyncState(state: SiteSyncState): Promise<void> {
     this.sync.set(state.site, structuredClone(state));
+  }
+
+  async getSecret(name: string): Promise<string | undefined> {
+    return this.secrets.get(name);
+  }
+
+  async putSecret(name: string, value: string | null): Promise<void> {
+    if (value === null) this.secrets.delete(name);
+    else this.secrets.set(name, value);
   }
 }

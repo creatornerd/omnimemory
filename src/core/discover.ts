@@ -116,6 +116,29 @@ export function toFirstPerson(sentence: string): string {
   return out;
 }
 
+/**
+ * AI-written summaries mix facts about you with remarks about your chats:
+ * "you've asked for an explanation of PID tuning", "your robotics work is the
+ * clearest area for tailoring explanations". Those aren't memories, and they
+ * change wording every time the summary is rewritten, so they'd come back as
+ * "new" forever. Drop them, and trim an "…, and you've asked about X" tail
+ * off an otherwise good fact.
+ */
+const ABOUT_CHATS =
+  /\b(?:tailor(?:ing|ed|s)?|supported area|clearest area|(?:previous|past|earlier|recent|our|these|those) (?:chats|conversations)|in (?:this|that|the|a) (?:chat|conversation)|evidence (?:suggests|shows)|based on (?:the|our|my|your) (?:chats|conversations))\b/i;
+const ASKED = /^(?:(?:the )?user|i|you)(?:'ve|’ve|'d|’d| have| has| had)?\s+(?:also\s+|recently\s+|once\s+|previously\s+|often\s+)?(?:asked|requested|inquired|wanted to know|sought|looked up|searched)\b/i;
+const ASKED_TAIL =
+  /,?\s+(?:and|but)\s+(?:(?:the )?user|i|you)(?:'ve|’ve|'d|’d| have| has| had)?\s+(?:also\s+|recently\s+|once\s+)?(?:asked|requested|inquired|wanted to know)\b.*$/i;
+
+/** The fact in a summary sentence, or null if it's only about past chats. */
+export function factOnly(sentence: string): string | null {
+  const original = sentence.trim();
+  let text = original.replace(ASKED_TAIL, '').trim();
+  if (!text || ASKED.test(text) || ABOUT_CHATS.test(text)) return null;
+  if (text !== original && !/[.!?]$/.test(text)) text += '.';
+  return text;
+}
+
 function wordCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
@@ -132,8 +155,8 @@ export function candidatesFrom(source: DiscoverySource): string[] {
 
   const firstPerson = /summary|saved memor|written by/i.test(source.group);
   return splitSentences(text)
-    .map((sentence) => (firstPerson ? toFirstPerson(sentence) : sentence))
-    .filter((sentence) => wordCount(sentence) >= MIN_WORDS);
+    .map((sentence) => (firstPerson ? factOnly(toFirstPerson(sentence)) : sentence))
+    .filter((sentence): sentence is string => sentence !== null && wordCount(sentence) >= MIN_WORDS);
 }
 
 /**
@@ -150,6 +173,8 @@ export function discover(
   const skipped = new Set(dismissed);
   const seen = new Set<string>();
   const found: FoundItem[] = [];
+  // Earlier finds in this same scan, so near-repeats inside one summary count once.
+  const accepted: Memory[] = [];
 
   for (const source of sources) {
     for (const candidate of candidatesFrom(source)) {
@@ -161,7 +186,9 @@ export function discover(
 
       const similar = findSimilar(text, existing);
       if (similar.some((match) => match.kind === 'duplicate')) continue;
+      if (findSimilar(text, accepted).some((match) => match.kind === 'duplicate')) continue;
       const conflict = similar.find((match) => match.kind === 'conflict');
+      accepted.push({ id: `found-${key}`, content: text, status: 'active' } as Memory);
 
       found.push({
         id: `${site}-${key}`,

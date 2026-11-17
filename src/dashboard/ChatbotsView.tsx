@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Check, Link2, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ArrowRight, Check, ChevronRight, Link2, RefreshCw } from 'lucide-react';
 import {
   SITE_IDS,
   SYNC_MODES,
@@ -110,6 +110,34 @@ function EntryList({ site, entries, links, store }: { site: SiteId; entries: Rem
   );
 }
 
+const SITE_NOTES: Record<SiteId, string> = {
+  chatgpt:
+    'ChatGPT reads custom instructions when a new chat starts. Its own Memory summary is written by ChatGPT from your chats; it’s shown here, but OmniMemory only reads it.',
+  claude:
+    'OmniMemory adds a marked block after anything you wrote yourself. Claude’s own Memory is written by Claude from your chats; it’s shown here, but OmniMemory only reads it.',
+  gemini: 'Each memory becomes one of Gemini’s instructions. Entries Gemini had before stay yours.',
+};
+
+/** A section that starts folded, to keep the page short. */
+function Fold({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 text-left text-[13px] font-medium text-ink-2 hover:text-ink"
+      >
+        <ChevronRight size={14} className={open ? 'rotate-90 transition-transform' : 'transition-transform'} />
+        {title}
+        {hint && <span className="text-[11px] font-normal text-ink-3">· {hint}</span>}
+      </button>
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
 function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState | undefined; store: Store }) {
   const { service, settings } = store;
   const toast = useToast();
@@ -176,12 +204,8 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
           </p>
         ) : (
           <>
-            <p className="text-xs leading-relaxed text-ink-3">
-              Your memories that are shared with {info.label} are kept in {SYNC_TARGETS[site]}.
-              {site === 'chatgpt' &&
-                ' ChatGPT reads custom instructions when a new chat starts, so changes show up in new chats, not ones already open. They don’t appear in ChatGPT’s own Memory summary, which ChatGPT writes from your chats; it’s shown here but OmniMemory doesn’t change it.'}
-              {site === 'claude' &&
-                ' OmniMemory adds a marked block after anything you wrote there yourself, which Claude keeps in mind in every chat. Claude’s own Memory is written by Claude from your chats and changed by asking it in words, so it’s shown here but OmniMemory doesn’t change it.'}
+            <p className="text-xs leading-relaxed text-ink-3" title={SITE_NOTES[site]}>
+              Writes to {SYNC_TARGETS[site]}.
             </p>
             {state && blocked === null && (
               <Approvals
@@ -201,20 +225,24 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
                 <Notice tone="warn">{note}</Notice>
               </div>
             ))}
-            <div className="mt-4 flex items-baseline gap-2">
-              <h3 className="text-[13px] font-semibold">What {info.label} remembers</h3>
-              {state?.snapshot && <span className="text-[11px] text-ink-3">checked {timeAgo(state.snapshot.fetchedAt)}</span>}
-            </div>
-            <div className="mt-2">
-              {state?.snapshot ? (
+            {state?.snapshot ? (
+              <Fold
+                title={`What ${info.label} remembers (${state.snapshot.entries.length})`}
+                hint={`checked ${timeAgo(state.snapshot.fetchedAt)}`}
+              >
+                {SITE_NOTES[site] && <p className="mb-2 text-[11px] leading-relaxed text-ink-3">{SITE_NOTES[site]}</p>}
                 <EntryList site={site} entries={state.snapshot.entries} links={state.links} store={store} />
-              ) : (
-                <p className="py-3 text-xs text-ink-3">
-                  Not checked yet. Open {info.hosts[0]} while signed in, or press Sync now.
-                </p>
-              )}
-            </div>
-            {state && <ActivityFeed site={site} activity={state.activity} />}
+              </Fold>
+            ) : (
+              blocked === null && (
+                <p className="mt-2 text-xs text-ink-3">Not checked yet. Open {info.hosts[0]} while signed in, or press Sync now.</p>
+              )
+            )}
+            {state && state.activity.length > 0 && (
+              <Fold title={`Recent activity (${state.activity.length})`}>
+                <ActivityFeed site={site} activity={state.activity} />
+              </Fold>
+            )}
           </>
         )}
       </div>
@@ -225,36 +253,18 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
 export function ChatbotsView({ store }: { store: Store }) {
   const states = useSyncStates();
   const { found } = useFound();
-  const { service, settings } = store;
+  const { settings } = store;
 
   return (
     <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl space-y-4 px-6 pb-10">
         <header className="pt-5">
-          <h1 className="text-base font-semibold">Chatbot memory</h1>
+          <h1 className="text-base font-semibold">Chatbots</h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-3">
-            Turn on sync for a chatbot and OmniMemory keeps its own memory in step with the memories here. Add, edit
-            or delete a memory and the change is written to every chatbot it’s shared with. Change or remove it on the
-            chatbot’s side and OmniMemory picks that up too. It shows you its first write before making it, never
-            takes over or removes something the chatbot had before without asking, and every change can be undone
-            below. Syncing uses your normal sign-in on each site and talks only to that site.
+            Keep each chatbot’s own memory in step with yours. Nothing is written without your OK, and every change can
+            be undone.
           </p>
         </header>
-
-        <div className="flex items-center gap-4 rounded-xl border border-line bg-surface px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px]">Sync in the background</p>
-            <p className="text-xs leading-relaxed text-ink-3">
-              When a chatbot isn’t open, briefly open it in a background tab to write your changes, then close it.
-              Turn off to sync only when you visit the chatbot yourself.
-            </p>
-          </div>
-          <Toggle
-            label="Sync in the background"
-            checked={settings.syncInBackground}
-            onChange={(syncInBackground) => void service.updateSettings({ syncInBackground })}
-          />
-        </div>
 
         {found.length > 0 && (
           <a

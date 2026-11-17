@@ -11,7 +11,8 @@ interface OmniSchema extends DBSchema {
   };
   settings: {
     key: string;
-    value: Settings;
+    /** The settings object, plus small secrets under "secret:<name>". */
+    value: Settings | string;
   };
   sync: {
     key: string;
@@ -76,11 +77,23 @@ export class IndexedDbBackend implements StorageBackend {
   }
 
   async getSettings(): Promise<Partial<Settings> | undefined> {
-    return (await this.db()).get('settings', SETTINGS_KEY);
+    const value = await (await this.db()).get('settings', SETTINGS_KEY);
+    return typeof value === 'object' ? value : undefined;
   }
 
   async putSettings(settings: Settings): Promise<void> {
     await (await this.db()).put('settings', settings, SETTINGS_KEY);
+  }
+
+  async getSecret(name: string): Promise<string | undefined> {
+    const value: unknown = await (await this.db()).get('settings', `secret:${name}`);
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  async putSecret(name: string, value: string | null): Promise<void> {
+    const db = await this.db();
+    if (value === null) await db.delete('settings', `secret:${name}`);
+    else await db.put('settings', value, `secret:${name}`);
   }
 
   async getSyncState(site: SiteId): Promise<SiteSyncState | undefined> {

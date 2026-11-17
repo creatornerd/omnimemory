@@ -133,6 +133,18 @@ export class MemoryService {
     };
   }
 
+  /** The user's Gemini API key, if they added one (see core/ai.ts). */
+  async getAiKey(): Promise<string | null> {
+    return (await this.backend.getSecret('gemini-key')) ?? null;
+  }
+
+  async setAiKey(key: string | null): Promise<void> {
+    const clean = key?.trim() ?? '';
+    if (clean && !/^[\w.-]{20,200}$/.test(clean)) throw new MemoryError('That doesn’t look like a Gemini API key.', 'invalid');
+    await this.backend.putSecret('gemini-key', clean || null);
+    this.onChange();
+  }
+
   async updateSettings(patch: SettingsPatch): Promise<Settings> {
     const current = await this.getSettings();
     const next: Settings = {

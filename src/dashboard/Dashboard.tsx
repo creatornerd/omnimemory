@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bot, Inbox, Library as LibraryIcon, Settings as SettingsIcon, Trash2 } from 'lucide-react';
-import { CATEGORIES, type Category } from '../core';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Bot, Inbox, Library as LibraryIcon, Settings as SettingsIcon, Sparkles, Trash2 } from 'lucide-react';
 import { DASHBOARD_VIEWS, type DashboardView } from '../shared/messages';
 import { takePendingCapture } from '../shared/platform';
 import { MemoryForm } from '../ui/components/MemoryForm';
@@ -10,12 +9,14 @@ import { useToast } from '../ui/components/Toast';
 import { cx } from '../ui/format';
 import { useStore } from '../ui/hooks/useStore';
 import { useFound } from '../ui/hooks/useFound';
+import { AssistantView } from './AssistantView';
 import { ChatbotsView } from './ChatbotsView';
 import { ReviewView } from './ReviewView';
 import { Library } from './Library';
 import { SettingsView } from './SettingsView';
 import { Trash } from './Trash';
 import { Welcome } from './Welcome';
+import { repeatCheck } from '../ui/hooks/repeat-check';
 
 function viewFromHash(): DashboardView {
   const view = window.location.hash.replace(/^#\/?/, '');
@@ -54,7 +55,6 @@ export function Dashboard() {
   const toast = useToast();
   const { found, held } = useFound();
   const [view, setView] = useState<DashboardView>(viewFromHash);
-  const [category, setCategory] = useState<Category | 'all'>('all');
   const [captured, setCaptured] = useState<string | null>(null);
   // Opened at #/welcome right after install, or from Settings.
   const [welcome, setWelcome] = useState(() => window.location.hash.replace(/^#\/?/, '') === 'welcome');
@@ -74,17 +74,10 @@ export function Dashboard() {
     void takePendingCapture().then((pending) => pending && setCaptured(pending.text));
   }, []);
 
-  function go(next: DashboardView, nextCategory: Category | 'all' = 'all') {
+  function go(next: DashboardView) {
     window.location.hash = `/${next}`;
     setView(next);
-    setCategory(nextCategory);
   }
-
-  const counts = useMemo(() => {
-    const byCategory = new Map<string, number>();
-    for (const memory of library) byCategory.set(memory.category, (byCategory.get(memory.category) ?? 0) + 1);
-    return byCategory;
-  }, [library]);
 
   return (
     <div className="flex h-screen min-w-0 bg-canvas">
@@ -97,42 +90,39 @@ export function Dashboard() {
           <span className="text-sm font-semibold">OmniMemory</span>
         </div>
 
-        <NavItem
-          active={view === 'library' && category === 'all'}
-          onClick={() => go('library')}
-          icon={<LibraryIcon size={14} />}
-          count={library.length}
-        >
-          All memories
-        </NavItem>
-        <div className="mt-0.5 space-y-0.5">
-          {CATEGORIES.map((name) => (
-            <NavItem
-              key={name}
-              active={view === 'library' && category === name}
-              onClick={() => go('library', name)}
-              count={counts.get(name)}
-            >
-              {name}
-            </NavItem>
-          ))}
+        <div className="space-y-0.5">
+          <NavItem active={view === 'library'} onClick={() => go('library')} icon={<LibraryIcon size={14} />} count={library.length}>
+            Memories
+          </NavItem>
+          <NavItem active={view === 'assistant'} onClick={() => go('assistant')} icon={<Sparkles size={14} />}>
+            Assistant
+          </NavItem>
+          <NavItem active={view === 'review'} onClick={() => go('review')} icon={<Inbox size={14} />} count={found.length}>
+            Review
+          </NavItem>
+          <NavItem active={view === 'chatbots'} onClick={() => go('chatbots')} icon={<Bot size={14} />} count={held.length}>
+            Chatbots
+          </NavItem>
+          <NavItem active={view === 'settings'} onClick={() => go('settings')} icon={<SettingsIcon size={14} />}>
+            Settings
+          </NavItem>
         </div>
 
-        <div className="my-3 border-t border-line" />
-        <NavItem active={view === 'review'} onClick={() => go('review')} icon={<Inbox size={14} />} count={found.length}>
-          Review
-        </NavItem>
-        <NavItem active={view === 'chatbots'} onClick={() => go('chatbots')} icon={<Bot size={14} />} count={held.length}>
-          Chatbot memory
-        </NavItem>
-        <NavItem active={view === 'trash'} onClick={() => go('trash')} icon={<Trash2 size={14} />} count={trash.length}>
-          Recently Deleted
-        </NavItem>
-        <NavItem active={view === 'settings'} onClick={() => go('settings')} icon={<SettingsIcon size={14} />}>
-          Settings
-        </NavItem>
+        <button
+          type="button"
+          onClick={() => go('trash')}
+          aria-current={view === 'trash' ? 'page' : undefined}
+          className={cx(
+            'mt-auto mb-2 flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs',
+            view === 'trash' ? 'bg-muted text-ink' : 'text-ink-3 hover:text-ink-2',
+          )}
+        >
+          <Trash2 size={13} />
+          <span className="flex-1">Recently deleted</span>
+          {trash.length > 0 && <span className="tabular-nums">{trash.length}</span>}
+        </button>
 
-        <div className="mt-auto rounded-lg border border-line bg-surface p-2.5">
+        <div className="rounded-lg border border-line bg-surface p-2.5">
           <label className="flex items-center gap-2 text-xs font-medium">
             <span className="flex-1">{settings.sharingPaused ? 'Sharing paused' : 'Sharing on'}</span>
             <Toggle
@@ -150,7 +140,8 @@ export function Dashboard() {
       </nav>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {view === 'library' && <Library store={store} category={category} createRequest={createRequest} />}
+        {view === 'library' && <Library store={store} createRequest={createRequest} />}
+        {view === 'assistant' && <AssistantView store={store} />}
         {view === 'review' && <ReviewView store={store} />}
         {view === 'chatbots' && <ChatbotsView store={store} />}
         {view === 'trash' && <Trash store={store} />}
@@ -176,6 +167,7 @@ export function Dashboard() {
             initial={{ content: captured }}
             defaultPermissions={settings.defaultPermissions}
             existing={library}
+            checkRepeats={repeatCheck(settings, library)}
             submitLabel="Save memory"
             onSubmit={async (values) => {
               await service.create({ ...values, source: 'selection' });

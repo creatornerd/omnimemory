@@ -6,11 +6,30 @@ can pick which of your memories to add to a message, and gives you one place to 
 hide and delete everything it stores.
 
 - **Local-first.** Memories live in IndexedDB inside this browser profile. There is no OmniMemory account,
-  server, paid API or analytics. The extension's own pages are locked down with `connect-src 'none'`.
+  server or analytics. The extension's own pages can connect to one address only — Google's Gemini API —
+  and only if you turn on the AI assistant with your own key.
+- **Optional AI assistant (Gemini 3.5 Flash Lite, your own key).** Off until you add a key under
+  **Settings → AI assistant**. Then:
+  - **Repeat check when saving.** Before a memory is saved, Gemini checks it against the ones you have and
+    flags rewordings the text rules miss ("I use the metric system" vs "I prefer metric units") and
+    contradictions ("I just moved to Texas" vs "I live in Ohio"). Saving still keeps both if you say so.
+  - **Assistant (Gemini 3.5 Flash).** A chat page for changing your memories by asking: "remove the
+    repeats", "I moved to Austin", "merge everything about robotics", "what do you know about me?". It
+    proposes adds, rewordings and removals as a checklist; nothing changes until you press **Apply**, and
+    **Undo** puts everything back. When Flash is overloaded, Flash Lite answers instead (and says so).
+  - **Find repeats.** One button on the library reads all your memories and lists groups that repeat each
+    other (with a merged wording; **Merge all** in one click) or contradict each other (**Keep this**).
+    Merged extras go to Recently Deleted.
+  - **Tidy imports.** The Review page turns everything ChatGPT, Claude and Gemini remember into one clean
+    list: first-person, one fact each, duplicates across chatbots combined, things you already have set
+    aside, categories filled in, contradictions flagged and left unticked. Nothing is hidden: what Gemini set
+    aside or left out stays one click away, and **Original list** shows the plain version.
+  Private memories and anything that looks like a password are never sent. Every AI result is a suggestion
+  you accept or not.
 - **Kept in step with each chatbot's own memory.** Memories you share with Gemini are kept in Gemini's
   *Instructions for Gemini*; memories you share with ChatGPT or Claude are kept in a marked block in
   ChatGPT's custom instructions or Claude's *Instructions*. Add, edit or delete one in OmniMemory and the chatbot is updated; change it on the chatbot
-  and OmniMemory picks that up. The dashboard's **Chatbot memory** page shows what each chatbot currently
+  and OmniMemory picks that up. The dashboard's **Chatbots** page shows what each chatbot currently
   remembers, and has an on/off switch per chatbot. This is the only network traffic, and it goes only to
   that chatbot's own site, using your normal sign-in.
 - **Sync asks before it does anything risky.** It's off until you turn it on for a chatbot, and the first
@@ -76,7 +95,7 @@ Reload any open chatbot tabs too, because they keep running the old content scri
 npm test
 ```
 
-There are 156 tests in 11 files. They run the real IndexedDB storage layer (using `fake-indexeddb`) and the
+There are 170 tests in 13 files. They run the real IndexedDB storage layer (using `fake-indexeddb`) and the
 same message router the content scripts talk to, so they cover the parts that decide what a chatbot can see.
 
 | File | What it covers |
@@ -91,7 +110,9 @@ same message router the content scripts talk to, so they cover the parts that de
 | `tests/permissions.test.ts` | Sharing rules and global/per-site pause |
 | `tests/sync.test.ts` | Chatbot memory sync against fake Gemini, ChatGPT and Claude that behave like the real ones: add/edit/delete/restore, edits and removals made on the chatbot coming back, no duplicates, credentials never copied, pause and per-chatbot switch, refused writes, one tab at a time, ChatGPT's 1,500-character limit and Claude's 6,000-character block, parsing replies captured from the real sites, off by default and first-write preview, asking before linking or removing an entry the chatbot had first, the activity log and undo |
 | `tests/discover.test.ts` | The Review checklist: splitting and rephrasing what chatbots remember, skipping what you already have and credentials, conflict flags, keep (with edits) / skip / bring back skipped, a kept Gemini entry not being added twice |
-| `tests/no-network.test.ts` | Only one file may make requests and only to the chatbot site itself, no HTML injection, minimal manifest permissions |
+| `tests/no-network.test.ts` | Only two files may make requests: the chatbot-sync one (same site only) and the Gemini client (one fixed Google address, key in a header); chatbot pages can't reach the AI client or key; no HTML injection; minimal manifest permissions |
+| `tests/repeat-loop.test.ts` | The repeat loop a real user hit: ChatGPT's re-worded summary and remarks about past chats ("you've asked how to tune PID") aren't offered again as new memories |
+| `tests/ai.test.ts` | The AI assistant against a pretend model: private, deleted and credential-like memories are never sent, the key stays out of settings and exports, replies are mapped back safely (bad indexes, unknown kinds and secret-looking text ignored), imports combine duplicates and nothing found is silently dropped |
 
 `npm run typecheck` runs the TypeScript checks without building.
 
@@ -117,15 +138,32 @@ These steps follow the acceptance criteria. You need to be signed in to at least
 7. **Restore it.** In the dashboard, open **Recently Deleted** and click **Restore**. It comes back with its
    sharing settings unchanged, so it's still off for Gemini.
 8. **Export.** Go to **Settings → Your data → Export** to download `omnimemory-export-YYYY-MM-DD.json`.
-9. **No paid API, no server.** Open `chrome://extensions`, find OmniMemory and click **service worker**,
-   then open the Network tab in DevTools. Use the extension and the tab stays empty. (Sync requests are made
-   from the chatbot tab itself; see the next section.)
+9. **No server.** Open `chrome://extensions`, find OmniMemory and click **service worker**, then open the
+   Network tab in DevTools. Use the extension and the tab stays empty. (Sync requests are made from the
+   chatbot tab itself; see the next section. With the AI assistant on, the dashboard and popup also call
+   `generativelanguage.googleapis.com`.)
+
+### Testing the AI assistant
+
+The dashboard sidebar is **Memories · Assistant · Review · Chatbots · Settings**; categories are chips at the
+top of Memories, extra filters sit behind **Filters**, and **Recently deleted** is at the bottom of the sidebar.
+
+1. **Settings → AI assistant**: paste a Gemini API key (from https://aistudio.google.com/apikey) and press
+   **Save key**. It's tested with a tiny request first, then the switch turns on.
+2. Add `I prefer metric units`, then try to save `I use the metric system for everything` → a Sparkles notice
+   says you already have it, and the button reads **Save anyway**.
+3. Add two memories that say the same thing in different words, then press **Find repeats** on the library →
+   they're grouped with a merged wording. **Merge all** merges every group; the extras are in Recently Deleted.
+4. **Assistant:** ask "Remove repeats and tidy up my memories". After a few seconds (longer when Gemini is
+   busy) it lists the changes. Untick any you don't want, press **Apply**, then try **Undo**.
+5. With chatbot sync on and something to review, open **Review** → after a second or two Gemini's tidy list
+   appears. Things that two chatbots both remember show as one item ("Claude · Gemini · combined 2").
 
 ### Testing chatbot memory sync
 
 Be signed in to ChatGPT, Claude and Gemini in the Chrome profile where OmniMemory is installed.
 
-1. Open the dashboard → **Chatbot memory** and turn **Keep in sync** on for ChatGPT, Claude and Gemini (it's off
+1. Open the dashboard → **Chatbots** and turn **Keep in sync** on for ChatGPT, Claude and Gemini (it's off
    for new installs). OmniMemory reads each chatbot, then shows **Waiting for your OK** with a preview of
    what it would add. Nothing has been written yet. Press **Looks good, start syncing**.
 2. Save a memory in the popup, e.g. `I program VEX robots using PROS and LemLib`. Within a few seconds
@@ -136,7 +174,7 @@ Be signed in to ChatGPT, Claude and Gemini in the Chrome profile where OmniMemor
    starting `[OmniMemory — edit these in the OmniMemory extension]` with the memory on its own line.
    Anything else you wrote in that field is kept.
    Claude: Settings → Your Claude → **Instructions** shows the same block after anything you wrote there.
-5. Back on **Chatbot memory**, both cards say **In sync** and list what each chatbot remembers, including
+5. Back on **Chatbots**, both cards say **In sync** and list what each chatbot remembers, including
    ChatGPT's own AI-written *Memory summary* (shown read-only, with **Add to OmniMemory**).
 6. Edit the memory in OmniMemory → both chatbots show the new wording. Turn off its Gemini dot → it's removed
    from Gemini only. Delete it → it's removed from both. Restore it → it comes back.
@@ -254,7 +292,7 @@ and AI-assisted extraction would be added.
 - **Chatbot memory sync** writes the memories you share with ChatGPT or Gemini into that chatbot's own memory
   settings, and reads what those settings hold so the dashboard can show it. It runs in the chatbot's tab,
   talks only to that chatbot's site, and uses your existing sign-in there; OmniMemory never sees or stores
-  your password or session. Turn it off per chatbot under **Chatbot memory**. Only one file in the code can
+  your password or session. Turn it off per chatbot under **Chatbots**. Only one file in the code can
   make requests, and it refuses anything but the chatbot site it's running on.
 - Chatbot pages can't read the database. They have to ask the service worker, which only returns memories
   that are shared with that site and not paused, deleted, private or outdated. The site is identified from
@@ -262,6 +300,12 @@ and AI-assisted extraction would be added.
 - Nothing from the page is read until you open the panel. When you do, your draft and the last few visible
   messages are read once to rank suggestions. They are not stored, and you can turn this off in
   **Settings → Suggestions**.
+- **The AI assistant** (off by default) sends memory text to Google's Gemini API with your own key: the
+  memory being saved plus your other shareable memories for the repeat check, your shareable memories for
+  Find repeats, and what the chatbots remember for the Review page. Private memories, deleted ones and anything
+  that looks like a password are never sent. Google's terms for your key apply (free keys may be used to
+  improve Google's products). The key is stored in the extension's own database, outside settings and exports,
+  and chatbot pages can't read it.
 - Memory text is always displayed as plain text, never HTML. The on-page UI lives in a closed shadow root, so
   the page's scripts and styles can't reach into it.
 - Sync only touches the parts listed above: Gemini's Instructions, and OmniMemory's own marked block in
@@ -313,7 +357,8 @@ and AI-assisted extraction would be added.
   interface ([design](docs/ARCHITECTURE.md#optional-sync-supabase)).
 - An MCP server exposing `memory_search`, `memory_save`, `memory_update` and `memory_delete` for chat apps that
   support MCP ([design](docs/ARCHITECTURE.md#optional-mcp-server)).
-- Opt-in AI-assisted memory suggestions from a conversation, always reviewed before saving
+- AI-assisted memory suggestions from a conversation, always reviewed before saving (the AI assistant's
+  plumbing is in place; this would be one more prompt)
   ([design](docs/ARCHITECTURE.md#future-ai-assisted-memory-extraction)).
 - Local embeddings for semantic relevance.
 - More providers (Perplexity, Copilot, Mistral Le Chat): add one adapter, one entry in `sites.ts` and one

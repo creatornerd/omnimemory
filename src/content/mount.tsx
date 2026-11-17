@@ -52,6 +52,18 @@ export function mount(adapter: SiteAdapter): void {
     host.addEventListener(type, (event) => event.stopPropagation());
   }
 
+  // Sites like ChatGPT send any key press to their own message box unless
+  // the focused element looks editable. From outside a closed shadow root the
+  // focused element is this host, so while one of our text fields has focus,
+  // mark the host editable and the site leaves the keys alone.
+  shadow.addEventListener('focusin', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      host.setAttribute('contenteditable', 'plaintext-only');
+    }
+  });
+  shadow.addEventListener('focusout', () => host.removeAttribute('contenteditable'));
+
   document.documentElement.appendChild(host);
   createRoot(container).render(<App adapter={adapter} />);
 

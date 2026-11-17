@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { ArrowUpRight, BookmarkPlus, ChevronRight, EyeOff, Pencil, Search, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, BookmarkPlus, ChevronRight, Copy, EyeOff, Pencil, Plus, Search, X } from 'lucide-react';
 import { CONTEXT_FOOTER } from '../../core/context';
 import { CATEGORIES, MAX_CONTENT_LENGTH, type Category } from '../../core/types';
 import { onChange } from '../../shared/change-bus';
@@ -49,7 +49,6 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState<string | null>(null); // text being reviewed, or null
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const preselected = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -211,31 +210,6 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
         </li>
       );
     }
-    if (deletingId === memory.id) {
-      return (
-        <li key={memory.id} className="om-inline" data-tone="danger">
-          <p>Delete this memory from OmniMemory? You can restore it for 30 days from the manager.</p>
-          <div className="om-actions" style={{ marginTop: 0 }}>
-            <button className="om-btn" data-variant="ghost" onClick={() => setDeletingId(null)}>
-              Cancel
-            </button>
-            <button
-              className="om-btn"
-              data-variant="danger"
-              autoFocus
-              onClick={() =>
-                void act(async () => {
-                  await send({ type: 'memory/delete', id: memory.id });
-                  setDeletingId(null);
-                }, 'Moved to Recently Deleted.')
-              }
-            >
-              Delete
-            </button>
-          </div>
-        </li>
-      );
-    }
     const checked = selected.includes(memory.id);
     const inputId = `om-${memory.id}`;
     return (
@@ -246,9 +220,8 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
           checked={checked}
           onChange={(event) => toggle(memory.id, event.target.checked)}
         />
-        <label htmlFor={inputId} className="om-row-text">
+        <label htmlFor={inputId} className="om-row-text" title={memory.category}>
           <div className="om-row-content">{memory.content}</div>
-          <div className="om-row-meta">{memory.category}</div>
         </label>
         <div className="om-row-actions">
           <button className="om-icon-btn" title="Edit" aria-label="Edit memory" onClick={() => setEditingId(memory.id)}>
@@ -266,15 +239,6 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
             }
           >
             <EyeOff size={13} />
-          </button>
-          <button
-            className="om-icon-btn"
-            data-tone="danger"
-            title="Delete"
-            aria-label="Delete memory"
-            onClick={() => setDeletingId(memory.id)}
-          >
-            <Trash2 size={13} />
           </button>
         </div>
       </li>
@@ -298,18 +262,24 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
         if (event.key === 'Escape') {
           event.stopPropagation();
           if (saving !== null) setSaving(null);
-          else if (editingId || deletingId) {
-            setEditingId(null);
-            setDeletingId(null);
-          } else onClose();
+          else if (editingId) setEditingId(null);
+          else onClose();
         }
       }}
     >
       <div className="om-header">
         <Mark size={18} />
-        <div className="om-title">
-          OmniMemory <span>· {adapter.label}</span>
-        </div>
+        <div className="om-title">OmniMemory</div>
+        {saving === null && (
+          <button
+            className="om-icon-btn"
+            title="Save a new memory"
+            aria-label="Save a new memory"
+            onClick={() => setSaving('')}
+          >
+            <Plus size={15} />
+          </button>
+        )}
         <button
           className="om-icon-btn"
           title="Open the memory manager"
@@ -353,9 +323,9 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
           <div className="om-body">
             {selection && (
               <div className="om-selection">
-                <span title={selection}>Selected: “{selection}”</span>
+                <span title={selection}>“{selection}”</span>
                 <button className="om-btn" onClick={() => setSaving(selection.slice(0, MAX_CONTENT_LENGTH))}>
-                  Save as memory…
+                  <BookmarkPlus size={13} /> Save
                 </button>
               </div>
             )}
@@ -374,8 +344,8 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
               </div>
             ) : result.total === 0 ? (
               <div className="om-empty">
-                <strong>No memories shared with {adapter.label} yet</strong>
-                Save one below, or turn on sharing for existing memories in the manager.
+                <strong>No memories here yet</strong>
+                Press + to save one.
               </div>
             ) : items.length === 0 ? (
               <div className="om-empty">No shared memories match “{query}”.</div>
@@ -383,7 +353,7 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
               <>
                 {suggested.length > 0 && (
                   <>
-                    <div className="om-section">Suggested for this chat</div>
+                    <div className="om-section">Suggested</div>
                     <ul className="om-list">{suggested.map((item) => row(item.memory))}</ul>
                   </>
                 )}
@@ -393,8 +363,8 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
                       {query.trim()
                         ? plural(others.length, 'result')
                         : suggested.length > 0
-                          ? 'Other memories'
-                          : `Shared with ${adapter.label}`}
+                          ? 'Everything else'
+                          : 'Your memories'}
                     </div>
                     <ul className="om-list">{others.map((item) => row(item.memory))}</ul>
                   </>
@@ -409,32 +379,33 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
                 {status.text}
               </p>
             )}
-            {preview && preview.text && (
-              <>
+            {showPreview && preview?.text && (
+              <pre className="om-preview" tabIndex={0}>
+                {preview.text}
+              </pre>
+            )}
+            <div className="om-actions" style={{ marginTop: 0 }}>
+              {preview?.text ? (
                 <button
-                  className="om-preview-toggle"
+                  className="om-preview-toggle om-grow"
                   aria-expanded={showPreview}
+                  title={`What ${adapter.label} will receive`}
                   onClick={() => setShowPreview((value) => !value)}
                 >
                   <ChevronRight size={13} />
-                  Preview what {adapter.label} will receive ·{' '}
-                  {plural(preview.includedIds.length, 'memory', 'memories')}
-                  {preview.truncated && ' (some left out — too long)'}
+                  Preview{preview.truncated ? ' (shortened)' : ''}
                 </button>
-                {showPreview && (
-                  <pre className="om-preview" tabIndex={0}>
-                    {preview.text}
-                  </pre>
-                )}
-              </>
-            )}
-            <div className="om-actions" style={{ marginTop: 0 }}>
-              <button className="om-btn om-grow" data-variant="ghost" onClick={() => setSaving('')}>
-                <BookmarkPlus size={13} />
-                Save a memory
-              </button>
-              <button className="om-btn" disabled={selected.length === 0 || busy} onClick={() => void copy()}>
-                Copy
+              ) : (
+                <span className="om-hint om-grow">{selected.length === 0 ? 'Tick memories to add them' : ''}</span>
+              )}
+              <button
+                className="om-icon-btn"
+                title="Copy instead"
+                aria-label="Copy context"
+                disabled={selected.length === 0 || busy}
+                onClick={() => void copy()}
+              >
+                <Copy size={14} />
               </button>
               <button
                 className="om-btn"
@@ -442,7 +413,7 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
                 disabled={selected.length === 0 || busy}
                 onClick={() => void insert()}
               >
-                Insert context{selected.length > 0 ? ` (${selected.length})` : ''}
+                Insert{selected.length > 0 ? ` ${selected.length}` : ''}
               </button>
             </div>
           </div>

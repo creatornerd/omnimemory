@@ -25,7 +25,7 @@ import {
   type SyncLink,
   type SyncOp,
 } from './sync';
-import { MAX_CONTENT_LENGTH, SITE_IDS, type SiteId } from './types';
+import { MAX_CONTENT_LENGTH, SITE_IDS, type Category, type SiteId } from './types';
 
 /** How long a tab may hold a plan before another tab can take over. */
 const LOCK_MS = 2 * 60 * 1000;
@@ -335,10 +335,14 @@ export class SyncService {
    * edits), and everything else on the list is skipped so it isn't suggested
    * again. The new memories then sync to every chatbot they're shared with.
    */
-  async review(keep: { id: string; text: string }[], skip: string[]): Promise<{ added: number; refused: string[] }> {
+  async review(
+    keep: { id: string; text: string; category?: Category }[],
+    skip: string[],
+  ): Promise<{ added: number; refused: string[] }> {
     const refused: string[] = [];
     let added = 0;
     const keepIds = new Map(keep.map((item) => [item.id, item.text]));
+    const categories = new Map(keep.map((item) => [item.id, item.category]));
     for (const site of SITE_IDS) {
       let state = await this.state(site);
       const handled = state.found.filter((item) => keepIds.has(item.id) || skip.includes(item.id));
@@ -353,7 +357,7 @@ export class SyncService {
           refused.push(content);
           continue;
         }
-        const memory = await this.memories.create({ content, source: site });
+        const memory = await this.memories.create({ content, source: site, category: categories.get(item.id) });
         added += 1;
         if (item.remoteId && SYNC_MODES[site] === 'items') {
           // Link it to the entry it came from, so the chatbot isn't given a

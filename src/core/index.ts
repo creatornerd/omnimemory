@@ -11,3 +11,4 @@ export * from './categorize';
 export * from './sync';
 export * from './sync-service';
 export * from './discover';
+export * from './ai';

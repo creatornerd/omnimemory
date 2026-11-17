@@ -18,13 +18,21 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe('privacy guarantees', () => {
-  it('makes network requests from one place only, and only to the chatbot site itself', () => {
+  it('makes network requests from two places only: the chatbot site itself, and Gemini when asked', () => {
     const banned = /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|importScripts/;
     const allowed = join('src', 'content', 'sync', 'http.ts');
+    const gemini = join('src', 'shared', 'gemini.ts');
     const offenders = sourceFiles('src')
-      .filter((file) => file !== allowed)
+      .filter((file) => file !== allowed && file !== gemini)
       .filter((file) => banned.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);
+
+    // The AI client talks to one fixed Google address, with the key in a header.
+    const ai = readFileSync(gemini, 'utf8');
+    expect(ai.match(/\bfetch\s*\(/g)).toHaveLength(1);
+    expect(ai.match(/https?:\/\/[^'"`\s]+/g)).toEqual(['https://generativelanguage.googleapis.com']);
+    expect(ai).toContain("'x-goog-api-key': key");
+    expect(ai).not.toMatch(/[?&]key=/);
 
     const http = readFileSync(allowed, 'utf8');
     expect(http.match(/\bfetch\s*\(/g)).toHaveLength(1);
@@ -32,11 +40,18 @@ describe('privacy guarantees', () => {
     expect(http).not.toMatch(/https?:\/\//);
   });
 
-  it('never sends anything from extension pages or the service worker', () => {
+  it('never sends anything from extension pages or the service worker, except the opt-in AI client', () => {
     const offenders = sourceFiles('src')
       .filter((file) => !file.startsWith(join('src', 'content')))
+      .filter((file) => file !== join('src', 'shared', 'gemini.ts'))
       .filter((file) => /siteRequest|\bfetch\s*\(/.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);
+    // Chatbot pages can't reach the AI client or the key.
+    const content = sourceFiles(join('src', 'content')).filter((file) =>
+      /shared\/gemini|core\/ai'|getAssistant|getAiKey|getSecret/.test(readFileSync(file, 'utf8')),
+    );
+    expect(content).toEqual([]);
+    expect(readFileSync(join('src', 'background', 'router.ts'), 'utf8')).not.toMatch(/getAiKey|getSecret/);
   });
 
   it('never renders memory text as HTML', () => {
@@ -57,7 +72,11 @@ describe('privacy guarantees', () => {
     expect(manifest.optional_host_permissions).toBeUndefined();
     expect(manifest.externally_connectable).toBeUndefined();
     expect(manifest.web_accessible_resources).toBeUndefined();
-    expect(manifest.content_security_policy.extension_pages).toContain("connect-src 'none'");
+    // Extension pages may connect only to the Gemini API (used only when the
+    // user turns the AI assistant on).
+    expect(manifest.content_security_policy.extension_pages).toContain(
+      'connect-src https://generativelanguage.googleapis.com;',
+    );
     expect(manifest.content_scripts[0].matches.sort()).toEqual([
       'https://chatgpt.com/*',
       'https://claude.ai/*',

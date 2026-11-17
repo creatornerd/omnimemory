@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlignJustify, GitMerge, Plus, Rows3, Search, X } from 'lucide-react';
+import { AlignJustify, GitMerge, Plus, Rows3, Search, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import {
   CATEGORIES,
   SITE_IDS,
@@ -17,10 +17,12 @@ import { ConfirmDialog } from '../ui/components/Dialog';
 import { MemoryForm } from '../ui/components/MemoryForm';
 import { Button, IconButton, Select } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
-import { plural } from '../ui/format';
+import { cx, plural } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
 import { MemoryRow } from './MemoryRow';
 import { MergeDialog } from './MergeDialog';
+import { RepeatsDialog } from './RepeatsDialog';
+import { repeatCheck } from '../ui/hooks/repeat-check';
 
 type SharingFilter = 'any' | SiteId | 'private' | 'none';
 type StatusFilter = 'any' | 'active' | 'outdated';
@@ -47,14 +49,15 @@ function matchesSharing(memory: Memory, filter: SharingFilter): boolean {
 
 interface LibraryProps {
   store: Store;
-  category: Category | 'all';
   /** Bumped to open the new-memory form. */
   createRequest?: number;
 }
 
-export function Library({ store, category, createRequest = 0 }: LibraryProps) {
+export function Library({ store, createRequest = 0 }: LibraryProps) {
   const { service, library, settings, loading } = store;
   const toast = useToast();
+  const [category, setCategory] = useState<Category | 'all'>('all');
+  const [showFilters, setShowFilters] = useState(false);
 
   const [query, setQuery] = useState('');
   const [source, setSource] = useState<Source | 'any'>('any');
@@ -66,6 +69,7 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [findingRepeats, setFindingRepeats] = useState(false);
   // The welcome tour's "Add your first memory" opens the new-memory form.
   useEffect(() => {
     if (createRequest > 0) setCreating(true);
@@ -109,8 +113,13 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
   const duplicateGroups = useMemo(() => findDuplicateGroups(library), [library]);
   const selectedMemories = visible.filter((memory) => selected.has(memory.id));
   const allSelected = visible.length > 0 && selectedMemories.length === visible.length;
-  const filtersActive =
-    source !== 'any' || sharing !== 'any' || status !== 'any' || date !== 'any' || query.trim() !== '';
+  const filterCount = [source !== 'any', sharing !== 'any', status !== 'any', date !== 'any'].filter(Boolean).length;
+  const filtersActive = filterCount > 0 || query.trim() !== '';
+  const counts = useMemo(() => {
+    const byCategory = new Map<string, number>();
+    for (const memory of library) byCategory.set(memory.category, (byCategory.get(memory.category) ?? 0) + 1);
+    return byCategory;
+  }, [library]);
 
   function clearFilters() {
     setQuery('');
@@ -172,12 +181,79 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
             className="field h-8 pl-8"
           />
         </div>
+        {settings.aiEnabled && library.length > 1 && (
+          <Button icon={<Sparkles size={14} />} onClick={() => setFindingRepeats(true)}>
+            Find repeats
+          </Button>
+        )}
         <Button variant="primary" icon={<Plus size={14} />} onClick={() => setCreating(true)}>
           New memory
         </Button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-6 pb-3">
+      <div className="flex flex-wrap items-center gap-1.5 px-6 pb-2.5">
+        {(['all', ...CATEGORIES] as const).map((name) => {
+          const count = name === 'all' ? library.length : (counts.get(name) ?? 0);
+          if (name !== 'all' && count === 0 && category !== name) return null;
+          return (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={category === name}
+              onClick={() => setCategory(name)}
+              className={cx(
+                'h-7 rounded-full border px-3 text-xs transition-colors',
+                category === name
+                  ? 'border-accent bg-accent text-accent-fg'
+                  : 'border-line text-ink-2 hover:border-line-strong hover:text-ink',
+              )}
+            >
+              {name === 'all' ? 'All' : name}
+              <span className={cx('ml-1.5 tabular-nums', category === name ? 'opacity-70' : 'text-ink-3')}>{count}</span>
+            </button>
+          );
+        })}
+
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={showFilters || filterCount > 0 ? 'secondary' : 'ghost'}
+            icon={<SlidersHorizontal size={13} />}
+            aria-expanded={showFilters}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            Filters{filterCount > 0 ? ` · ${filterCount}` : ''}
+          </Button>
+          <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+            <option value="recent">{query.trim() ? 'Best match' : 'Most recent'}</option>
+            <option value="oldest">Oldest</option>
+            <option value="alpha">A → Z</option>
+          </Select>
+          <div className="flex rounded-md border border-line-strong p-px" role="group" aria-label="View">
+            <IconButton
+              label="Detailed view"
+              className="size-[26px]"
+              active={view === 'detailed'}
+              aria-pressed={view === 'detailed'}
+              onClick={() => void service.updateSettings({ libraryView: 'detailed' })}
+            >
+              <Rows3 size={14} />
+            </IconButton>
+            <IconButton
+              label="Compact list"
+              className="size-[26px]"
+              active={view === 'compact'}
+              aria-pressed={view === 'compact'}
+              onClick={() => void service.updateSettings({ libraryView: 'compact' })}
+            >
+              <AlignJustify size={14} />
+            </IconButton>
+          </div>
+        </div>
+      </div>
+
+      {(showFilters || filterCount > 0) && (
+      <div className="animate-rise flex flex-wrap items-center gap-2 px-6 pb-2.5">
         <Select aria-label="Filter by source" value={source} onChange={(e) => setSource(e.target.value as Source | 'any')}>
           <option value="any">Any source</option>
           {SOURCES.map((value) => (
@@ -213,36 +289,12 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
             Clear
           </Button>
         )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-            <option value="recent">{query.trim() ? 'Best match' : 'Most recent'}</option>
-            <option value="oldest">Oldest</option>
-            <option value="alpha">A → Z</option>
-          </Select>
-          <div className="flex rounded-md border border-line-strong p-px" role="group" aria-label="View">
-            <IconButton
-              label="Detailed view"
-              className="size-[26px]"
-              active={view === 'detailed'}
-              aria-pressed={view === 'detailed'}
-              onClick={() => void service.updateSettings({ libraryView: 'detailed' })}
-            >
-              <Rows3 size={14} />
-            </IconButton>
-            <IconButton
-              label="Compact list"
-              className="size-[26px]"
-              active={view === 'compact'}
-              aria-pressed={view === 'compact'}
-              onClick={() => void service.updateSettings({ libraryView: 'compact' })}
-            >
-              <AlignJustify size={14} />
-            </IconButton>
-          </div>
-        </div>
       </div>
+      )}
 
+      <div className="border-b border-line" />
+
+      {selected.size > 0 && (
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line bg-canvas px-4 text-xs">
         <input
           type="checkbox"
@@ -254,9 +306,7 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
             setSelected(event.target.checked ? new Set(visible.map((m) => m.id)) : new Set())
           }
         />
-        {selected.size === 0 ? (
-          <span className="pl-1 text-ink-3">Select memories for bulk actions</span>
-        ) : (
+        {(
           <div className="animate-rise flex flex-wrap items-center gap-2 pl-1">
             <span className="font-medium">{selected.size} selected</span>
             <Select
@@ -325,16 +375,23 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
           </div>
         )}
       </div>
+      )}
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {duplicateGroups.length > 0 && !filtersActive && category === 'all' && (
           <div className="flex items-center gap-3 border-b border-line bg-warn-soft px-4 py-2 text-xs text-warn">
             <span className="flex-1">
-              {plural(duplicateGroups.length, 'set')} of memories look like duplicates.
+              {plural(duplicateGroups.length, 'set')} of memories look like repeats.
             </span>
-            <Button size="sm" icon={<GitMerge size={13} />} onClick={() => setMerging(duplicateGroups[0])}>
-              Review{duplicateGroups.length > 1 ? ' first set' : ''}
-            </Button>
+            {settings.aiEnabled ? (
+              <Button size="sm" icon={<Sparkles size={13} />} onClick={() => setFindingRepeats(true)}>
+                Tidy up
+              </Button>
+            ) : (
+              <Button size="sm" icon={<GitMerge size={13} />} onClick={() => setMerging(duplicateGroups[0])}>
+                Review{duplicateGroups.length > 1 ? ' first set' : ''}
+              </Button>
+            )}
           </div>
         )}
 
@@ -343,6 +400,7 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
             <MemoryForm
               defaultPermissions={settings.defaultPermissions}
               existing={library}
+              checkRepeats={repeatCheck(settings, library)}
               submitLabel="Save memory"
               onSubmit={async (values) => {
                 await service.create({ ...values, source: 'manual' });
@@ -422,6 +480,8 @@ export function Library({ store, category, createRequest = 0 }: LibraryProps) {
           chatbot learned on its own from your chats is separate and stays there.
         </p>
       </ConfirmDialog>
+
+      <RepeatsDialog open={findingRepeats} store={store} onClose={() => setFindingRepeats(false)} />
 
       <MergeDialog
         memories={merging}

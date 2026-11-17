@@ -1,7 +1,10 @@
+import { MemoryAssistant } from '../core/ai';
+import type { Settings } from '../core/types';
 import { IndexedDbBackend } from '../core/indexeddb-backend';
 import { MemoryService } from '../core/service';
 import { SyncService } from '../core/sync-service';
 import { emitChange } from './change-bus';
+import { generateJson } from './gemini';
 import type { DashboardView } from './messages';
 
 /** True when running as a real extension (not the Vite dev server or tests). */
@@ -21,6 +24,20 @@ export function getService(): MemoryService {
   backend ??= new IndexedDbBackend();
   service ??= new MemoryService(backend, { onChange: emitChange });
   return service;
+}
+
+let assistant: MemoryAssistant | undefined;
+
+/**
+ * The AI assistant, or null when the user hasn't turned it on. Only the
+ * extension's own pages use it; the key is read fresh for every request.
+ */
+export function getAssistant(settings: Settings): MemoryAssistant | null {
+  if (!settings.aiEnabled) return null;
+  assistant ??= new MemoryAssistant(async (request, model) =>
+    generateJson(request, (await getService().getAiKey()) ?? '', model),
+  );
+  return assistant;
 }
 
 /** Chatbot memory sync bookkeeping, on the same database. */

@@ -24,8 +24,8 @@ export const MAX_QUERY_LENGTH = 200;
 export const MAX_PAGE_TEXT_LENGTH = 6000;
 export const MAX_IDS = 100;
 
-export type DashboardView = 'library' | 'review' | 'chatbots' | 'trash' | 'settings';
-export const DASHBOARD_VIEWS: readonly DashboardView[] = ['library', 'review', 'chatbots', 'trash', 'settings'];
+export type DashboardView = 'library' | 'assistant' | 'review' | 'chatbots' | 'trash' | 'settings';
+export const DASHBOARD_VIEWS: readonly DashboardView[] = ['library', 'assistant', 'review', 'chatbots', 'trash', 'settings'];
 
 // Limits for what a chatbot page may report about its own memory.
 export const MAX_REMOTE_ENTRIES = 300;

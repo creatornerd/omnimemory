@@ -6,6 +6,7 @@ import { Badge, IconButton } from '../ui/components/primitives';
 import { SiteToggles } from '../ui/components/SiteToggles';
 import { useToast } from '../ui/components/Toast';
 import { cx, fullDate, timeAgo } from '../ui/format';
+import { repeatCheck } from '../ui/hooks/repeat-check';
 
 interface MemoryRowProps {
   memory: Memory;
@@ -81,6 +82,7 @@ export function MemoryRow({
           initial={memory}
           defaultPermissions={settings.defaultPermissions}
           existing={library}
+          checkRepeats={repeatCheck(settings, library, memory.id)}
           submitLabel="Save changes"
           onSubmit={async (values) => {
             await service.update(memory.id, values);

@@ -7,6 +7,7 @@ import { Button, Toggle } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { cx, plural } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
+import { AiSettings } from './AiSettings';
 import { ImportDialog } from './ImportDialog';
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
@@ -183,12 +184,30 @@ export function SettingsView({ store }: { store: Store }) {
           </Row>
         </Section>
 
+        <Section title="Chatbot sync" description="Turn sync on or off for each chatbot on the Chatbots page.">
+          <Row
+            label="Sync in the background"
+            hint="When a chatbot isn’t open, briefly open it in a background tab to write your changes, then close it. Turn off to sync only when you visit the chatbot yourself."
+          >
+            <Toggle
+              label="Sync in the background"
+              checked={settings.syncInBackground}
+              onChange={(syncInBackground) => void service.updateSettings({ syncInBackground })}
+            />
+          </Row>
+        </Section>
+
+        <Section title="AI assistant" description="Optional. Off unless you add your own Gemini API key.">
+          <AiSettings store={store} />
+        </Section>
+
         <Section title="Privacy">
           <ul className="max-w-xl list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-ink-2">
             <li>
               There is no OmniMemory account, server, analytics or telemetry. The only network requests are
               chatbot memory sync, which talks to ChatGPT, Claude and Gemini themselves, with your normal
-              sign-in on those sites. You can turn it off per chatbot under Chatbot memory.
+              sign-in on those sites (you can turn it off per chatbot under Chatbots), and, only if you
+              turn on the AI assistant, requests to Google’s Gemini API with your own key.
             </li>
             <li>
               Chatbot pages can only receive memories you have shared with that chatbot, and only when you

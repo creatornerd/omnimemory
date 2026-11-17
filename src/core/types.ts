@@ -84,6 +84,11 @@ export interface Settings {
   siteSync: SitePermissions;
   /** Open a background tab to sync when no tab of that chatbot is open. */
   syncInBackground: boolean;
+  /**
+   * Use the Gemini API (with the user's own key) to spot repeats and tidy
+   * imports. See core/ai.ts. The key itself is stored separately, never here.
+   */
+  aiEnabled: boolean;
 }
 
 /** A settings change. Per-chatbot switches can be changed one at a time. */
@@ -103,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Off until the user turns it on for a chatbot (and OKs the first write).
   siteSync: { chatgpt: false, claude: false, gemini: false },
   syncInBackground: true,
+  aiEnabled: false,
 };
 
 /** Fields a caller may supply when creating a memory. */

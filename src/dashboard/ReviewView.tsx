@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCheck, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 import { SITE_IDS, SYNC_MODES, syncBlocked, type FoundItem, type SiteId } from '../core';
-import { getSyncService, isExtension } from '../shared/platform';
+import { getAssistant, getSyncService, isExtension } from '../shared/platform';
+import { AiReview, useImportPlan } from './AiReview';
 import { SITES } from '../shared/sites';
-import { Badge, Button, Notice } from '../ui/components/primitives';
+import { Badge, Button } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { cx, plural } from '../ui/format';
 import { useFound } from '../ui/hooks/useFound';
@@ -104,6 +105,10 @@ export function ReviewView({ store }: { store: Store }) {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const assistant = getAssistant(store.settings);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const ai = useImportPlan(assistant, found, store);
+  const aiMode = !!assistant && !showOriginal && found.length > 0;
 
   // New items flagged as possible contradictions start unticked; after that
   // the user's own ticks win.
@@ -187,7 +192,11 @@ export function ReviewView({ store }: { store: Store }) {
         <div className="mr-auto">
           <h1 className="text-base font-semibold">Review</h1>
           <p className="text-xs text-ink-3">
-            {loading ? 'Loading…' : `${plural(found.length, 'thing', 'things')} your chatbots remember that OmniMemory doesn’t`}
+            {loading
+              ? 'Loading…'
+              : found.length === 0
+                ? 'Things your chatbots remember that OmniMemory doesn’t show up here.'
+                : `${plural(found.length, 'thing', 'things')} your chatbots remember that OmniMemory doesn’t. Keep what’s useful; the rest won’t come back.`}
           </p>
         </div>
         <Button icon={<RefreshCw size={14} className={scanning ? 'animate-spin' : ''} />} disabled={scanning} onClick={() => void scan()}>
@@ -197,11 +206,25 @@ export function ReviewView({ store }: { store: Store }) {
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 pt-4 pb-28">
-          <Notice tone="info">
-            OmniMemory checks each chatbot’s memory whenever it syncs and lists anything it doesn’t have yet. Tick what
-            you want to keep — click any text to reword it first — then press <strong>Keep and sync</strong>. Kept items
-            become memories and are shared with your other chatbots; the rest won’t be suggested again.
-          </Notice>
+
+          {assistant && showOriginal && found.length > 0 && (
+            <div className="mt-3 flex justify-end">
+              <Button size="sm" icon={<Sparkles size={13} />} onClick={() => setShowOriginal(false)}>
+                Back to Gemini’s tidy list
+              </Button>
+            </div>
+          )}
+
+          {aiMode && (
+            <AiReview
+              found={found}
+              plan={ai.plan}
+              loading={ai.loading}
+              error={ai.error}
+              onRetry={ai.retry}
+              onShowOriginal={() => setShowOriginal(true)}
+            />
+          )}
 
           {!loading && found.length === 0 && (
             <div className="py-16 text-center">
@@ -213,7 +236,7 @@ export function ReviewView({ store }: { store: Store }) {
             </div>
           )}
 
-          {bySite.map(([site, items]) => {
+          {!aiMode && bySite.map(([site, items]) => {
             const allOn = items.every((item) => !unchecked.has(item.id));
             return (
               <section key={site} className="mt-5">
@@ -286,7 +309,7 @@ export function ReviewView({ store }: { store: Store }) {
         </div>
       </div>
 
-      {found.length > 0 && (
+      {found.length > 0 && !aiMode && (
         <footer className="flex flex-wrap items-center gap-3 border-t border-line bg-surface px-6 py-3">
           <p className="mr-auto text-xs text-ink-2">
             Keep {keepCount}

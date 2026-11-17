@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Eye, EyeOff, Inbox, Pencil, Plus, Search, Trash2, X, ShieldCheck } from 'lucide-react';
-import { searchMemories, type Memory, type SiteId } from '../core';
+import { ArrowUpRight, Inbox, Plus, Search, Trash2, X } from 'lucide-react';
+import { searchMemories, type Memory } from '../core';
 import { openDashboard, takePendingCapture } from '../shared/platform';
-import { SITE_LIST } from '../shared/sites';
 import { MemoryForm, type MemoryFormValues } from '../ui/components/MemoryForm';
 import { Badge, Button, IconButton, Logo, Toggle } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
-import { cx, plural, timeAgo } from '../ui/format';
+import { cx, plural } from '../ui/format';
 import { useFound } from '../ui/hooks/useFound';
 import { useStore } from '../ui/hooks/useStore';
+import { repeatCheck } from '../ui/hooks/repeat-check';
 
 const RECENT_LIMIT = 8;
 const SEARCH_LIMIT = 40;
@@ -62,15 +62,13 @@ export function Popup() {
   return (
     <div className="flex h-[560px] w-[380px] flex-col bg-canvas">
       <header className="flex items-center gap-2 px-3.5 pt-3 pb-2.5">
-        <Logo size={22} />
-        <div className="min-w-0 flex-1 leading-tight">
-          <h1 className="text-[13px] font-semibold">OmniMemory</h1>
-          <p className="text-[11px] text-ink-3" aria-live="polite">
-            {loading ? 'Loading…' : `${plural(library.length, 'memory', 'memories')} stored on this device`}
-          </p>
-        </div>
-        <label className="flex items-center gap-2 text-[11px] font-medium text-ink-2">
-          {paused ? 'Sharing paused' : 'Sharing on'}
+        <Logo size={20} />
+        <h1 className="flex-1 text-[13px] font-semibold">OmniMemory</h1>
+        <label
+          className="flex items-center gap-2 text-[11px] text-ink-2"
+          title={paused ? 'No chatbot gets any memory until you turn this back on' : 'Chatbots can receive the memories you share'}
+        >
+          {paused ? 'Paused' : 'Sharing'}
           <Toggle
             label="Share memories with chatbots"
             checked={!paused}
@@ -79,73 +77,25 @@ export function Popup() {
         </label>
       </header>
 
-      <div className="flex items-center gap-1.5 px-3.5 pb-2.5" role="group" aria-label="Chatbots that can receive memories">
-        {SITE_LIST.map((site) => {
-          const sitePaused = settings.sitePaused[site.id];
-          const live = !paused && !sitePaused;
-          return (
-            <button
-              key={site.id}
-              type="button"
-              role="switch"
-              aria-checked={!sitePaused}
-              disabled={paused}
-              title={
-                paused
-                  ? 'Sharing is paused everywhere'
-                  : sitePaused
-                    ? `${site.label} is paused — click to resume`
-                    : `${site.label} can receive memories — click to pause`
-              }
-              onClick={() =>
-                void service.updateSettings({ sitePaused: { [site.id]: !sitePaused } as Record<SiteId, boolean> })
-              }
-              className={cx(
-                'inline-flex h-6 flex-1 items-center justify-center gap-1.5 rounded-md border text-[11px] font-medium transition-colors',
-                live ? 'border-line bg-surface text-ink' : 'border-transparent bg-subtle text-ink-3',
-                !paused && 'hover:border-line-strong',
-              )}
-            >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ background: live ? site.color : 'var(--om-ink-3)' }}
-              />
-              {site.label}
-              {!live && <span className="font-normal">· off</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      {found.length > 0 && (
+      {(found.length > 0 || held.length > 0) && (
         <button
           type="button"
-          onClick={() => void openDashboard('review')}
-          className="mx-3.5 mb-2.5 flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-left text-xs hover:bg-subtle"
+          onClick={() => void openDashboard(held.length > 0 ? 'chatbots' : 'review')}
+          className={cx(
+            'mx-3.5 mb-2.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs hover:opacity-90',
+            held.length > 0 ? 'bg-warn-soft text-warn' : 'bg-subtle text-ink-2',
+          )}
         >
-          <Inbox size={14} className="shrink-0 text-ink-2" />
-          <span className="min-w-0 flex-1">
-            <strong className="font-semibold">{plural(found.length, 'thing', 'things')} found on your chatbots.</strong>{' '}
-            <span className="text-ink-2">Review</span>
+          <Inbox size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            {[
+              held.length > 0 ? `${plural(held.length, 'change needs', 'changes need')} your OK` : '',
+              found.length > 0 ? `${found.length} to review` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </span>
-          <ArrowUpRight size={13} className="shrink-0 text-ink-3" />
-        </button>
-      )}
-
-      {held.length > 0 && (
-        <button
-          type="button"
-          onClick={() => void openDashboard('chatbots')}
-          className="mx-3.5 mb-2.5 flex items-center gap-2 rounded-lg border border-line-strong bg-warn-soft px-2.5 py-2 text-left text-xs hover:opacity-90"
-        >
-          <ShieldCheck size={14} className="shrink-0 text-warn" />
-          <span className="min-w-0 flex-1">
-            <strong className="font-semibold">
-              {plural(held.length, 'sync change needs', 'sync changes need')} your OK.
-            </strong>{' '}
-            <span className="text-ink-2">Check</span>
-          </span>
-          <ArrowUpRight size={13} className="shrink-0 text-ink-3" />
+          <ArrowUpRight size={13} className="shrink-0" />
         </button>
       )}
 
@@ -182,6 +132,7 @@ export function Popup() {
               initial={{ content: captured ?? '' }}
               defaultPermissions={settings.defaultPermissions}
               existing={library}
+              checkRepeats={repeatCheck(settings, library)}
               submitLabel="Save memory"
               onSubmit={saveNew}
               onCancel={() => {
@@ -192,15 +143,13 @@ export function Popup() {
           </section>
         )}
 
-        <h2 className="px-3.5 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
-          {query.trim() ? plural(results.length, 'result') : 'Recent'}
-        </h2>
+        {query.trim() && (
+          <h2 className="px-3.5 pt-2.5 pb-1 text-[11px] text-ink-3">{plural(results.length, 'result')}</h2>
+        )}
 
         {!loading && results.length === 0 && (
           <p className="px-3.5 py-6 text-center text-xs leading-relaxed text-ink-3">
-            {query.trim()
-              ? 'No memories match that search.'
-              : 'No memories yet. Save one and it will be available on ChatGPT, Claude and Gemini.'}
+            {query.trim() ? 'No memories match that search.' : 'Nothing saved yet. Press New memory to add one.'}
           </p>
         )}
 
@@ -215,6 +164,7 @@ export function Popup() {
                     initial={memory}
                     defaultPermissions={settings.defaultPermissions}
                     existing={library}
+                    checkRepeats={repeatCheck(settings, library, memory.id)}
                     submitLabel="Save"
                     onSubmit={async (values) => {
                       await service.update(memory.id, values);
@@ -252,24 +202,14 @@ export function Popup() {
                     >
                       {memory.content}
                     </p>
-                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-3">
-                      <span>{memory.category}</span>
-                      <span aria-hidden>·</span>
-                      <span>{timeAgo(recency(memory))}</span>
-                      {!memory.enabled && <Badge>Private</Badge>}
-                      {memory.status === 'outdated' && <Badge tone="warn">Outdated</Badge>}
-                    </p>
+                    {(!memory.enabled || memory.status === 'outdated') && (
+                      <p className="mt-1 flex items-center gap-1.5">
+                        {!memory.enabled && <Badge>Private</Badge>}
+                        {memory.status === 'outdated' && <Badge tone="warn">Outdated</Badge>}
+                      </p>
+                    )}
                   </button>
-                  <div className="flex opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-                    <IconButton
-                      label={memory.enabled ? 'Hide from chatbots (keep private)' : 'Share with chatbots again'}
-                      onClick={() => void service.update(memory.id, { enabled: !memory.enabled })}
-                    >
-                      {memory.enabled ? <Eye size={14} /> : <EyeOff size={14} />}
-                    </IconButton>
-                    <IconButton label="Edit" onClick={() => setEditingId(memory.id)}>
-                      <Pencil size={14} />
-                    </IconButton>
+                  <div className="flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                     <IconButton label="Delete" tone="danger" onClick={() => setConfirmingId(memory.id)}>
                       <Trash2 size={14} />
                     </IconButton>
@@ -290,10 +230,10 @@ export function Popup() {
             setComposing(true);
           }}
         >
-          Save memory
+          New memory
         </Button>
-        <Button className="ml-auto" icon={<ArrowUpRight size={14} />} onClick={() => void openDashboard('library')}>
-          Manage all memories
+        <Button className="ml-auto" variant="ghost" icon={<ArrowUpRight size={14} />} onClick={() => void openDashboard('library')}>
+          Open OmniMemory
         </Button>
       </footer>
     </div>

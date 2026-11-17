@@ -46,15 +46,39 @@ function numbers(text: string): string[] {
   return rawTokens(text).filter((token) => /^\d/.test(token)).sort();
 }
 
+/** "program"/"programming", "robot"/"robots": close enough to count as the same word. */
+function sameWord(a: string, b: string): boolean {
+  return a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+}
+
+/**
+ * How much of the shorter text is contained in the longer one, in [0, 1].
+ * Catches a fact repeated inside a longer sentence ("I program VEX robots
+ * using PROS" inside "I program VEX robots using PROS and LemLib, and …"),
+ * which plain word overlap scores low.
+ */
+export function containment(a: string, b: string): number {
+  const tokensA = [...new Set(contentTokens(a))];
+  const tokensB = [...new Set(contentTokens(b))];
+  const [short, long] = tokensA.length <= tokensB.length ? [tokensA, tokensB] : [tokensB, tokensA];
+  if (short.length < 3) return 0;
+  return short.filter((token) => long.some((other) => sameWord(token, other))).length / short.length;
+}
+
 /** Similarity in [0, 1] between two pieces of memory text. */
 export function similarity(a: string, b: string): number {
   if (normalizeText(a) === normalizeText(b)) return 1;
   return jaccard(new Set(contentTokens(a)), new Set(contentTokens(b)));
 }
 
+const CONTAINED_DUPLICATE = 0.85;
+const CONTAINED_OVERLAP = 0.6;
+
 function classify(a: string, b: string): { kind: MatchKind; similarity: number; reason: string } | null {
-  const score = similarity(a, b);
-  if (score < CONFLICT_THRESHOLD) return null;
+  const overlap = similarity(a, b);
+  const contained = containment(a, b);
+  if (overlap < CONFLICT_THRESHOLD && contained < CONTAINED_OVERLAP) return null;
+  const score = Math.max(overlap, contained * 0.9);
 
   if (hasNegation(a) !== hasNegation(b)) {
     return { kind: 'conflict', similarity: score, reason: 'One says the opposite of the other' };
@@ -64,12 +88,15 @@ function classify(a: string, b: string): { kind: MatchKind; similarity: number; 
   if ((numbersA.length > 0 || numbersB.length > 0) && numbersA.join(',') !== numbersB.join(',')) {
     return { kind: 'conflict', similarity: score, reason: 'Same topic, different numbers' };
   }
-  if (score >= DUPLICATE_THRESHOLD) {
+  if (overlap >= DUPLICATE_THRESHOLD) {
     return {
       kind: 'duplicate',
       similarity: score,
       reason: normalizeText(a) === normalizeText(b) ? 'Identical wording' : 'Nearly identical wording',
     };
+  }
+  if (contained >= CONTAINED_DUPLICATE) {
+    return { kind: 'duplicate', similarity: score, reason: 'Says the same thing' };
   }
   return { kind: 'conflict', similarity: score, reason: 'Overlaps with an existing memory' };
 }

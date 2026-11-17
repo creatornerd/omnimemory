@@ -200,9 +200,8 @@ export function ActivityFeed({ site, activity }: { site: SiteId; activity: Activ
   }
 
   return (
-    <div className="mt-5">
-      <h3 className="text-[13px] font-semibold">Recent activity</h3>
-      <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+    <div>
+      <ul className="divide-y divide-line rounded-lg border border-line">
         {rows.map((entry) => {
           const info = ACTIVITY[entry.kind];
           const Icon = info.icon;
