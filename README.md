@@ -375,3 +375,6 @@ and AI-assisted extraction would be added.
 | `npm run typecheck` | TypeScript only |
 | `npm run dev` | Dev server for the popup, dashboard and chatbot fixture |
 | `npm run icons` | Regenerate `public/icons/*.png` |
+
+
+Copyright ©️2026 Ahaan Hossain. All rights reserved. 
