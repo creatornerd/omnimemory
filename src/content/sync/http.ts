@@ -14,7 +14,11 @@ export async function siteRequest(path: string, init: RequestInit = {}): Promise
   if (url.origin !== window.location.origin) {
     throw new Error('OmniMemory only talks to the chatbot site itself.');
   }
-  return fetch(url.toString(), { ...init, credentials: 'same-origin', cache: 'no-store' });
+  // Firefox gives content scripts a `content` object whose fetch runs as the
+  // page itself (so the site sees its own origin). Chrome already does that.
+  const page = (globalThis as { content?: { fetch?: typeof fetch } }).content;
+  const scope = typeof page?.fetch === 'function' ? (page as { fetch: typeof fetch }) : globalThis;
+  return scope.fetch(url.toString(), { ...init, credentials: 'same-origin', cache: 'no-store' });
 }
 
 export class SyncError extends Error {

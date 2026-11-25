@@ -72,7 +72,7 @@ export function MergeDialog({ memories, service, onClose }: MergeDialogProps) {
               <input
                 type="radio"
                 name="keep"
-                className="mt-1 accent-(--om-accent)"
+                className="mt-1 accent-(--om-brand)"
                 checked={keepId === memory.id}
                 onChange={() => {
                   setKeepId(memory.id);

@@ -1,4 +1,4 @@
-import { contentTokens, normalizeText, rawTokens } from './text';
+import { canonicalTokens, normalizeText, rawTokens } from './text';
 import type { Memory } from './types';
 
 /**
@@ -58,23 +58,30 @@ function sameWord(a: string, b: string): boolean {
  * which plain word overlap scores low.
  */
 export function containment(a: string, b: string): number {
-  const tokensA = [...new Set(contentTokens(a))];
-  const tokensB = [...new Set(contentTokens(b))];
+  const tokensA = [...new Set(canonicalTokens(a))];
+  const tokensB = [...new Set(canonicalTokens(b))];
   const [short, long] = tokensA.length <= tokensB.length ? [tokensA, tokensB] : [tokensB, tokensA];
-  if (short.length < 3) return 0;
+  // Very short notes only count as contained in one that adds a word or two
+  // ("I live in Seattle" / "I live in Seattle, Washington").
+  if (short.length < 2 || (short.length === 2 && long.length > 3)) return 0;
   return short.filter((token) => long.some((other) => sameWord(token, other))).length / short.length;
 }
 
 /** Similarity in [0, 1] between two pieces of memory text. */
 export function similarity(a: string, b: string): number {
   if (normalizeText(a) === normalizeText(b)) return 1;
-  return jaccard(new Set(contentTokens(a)), new Set(contentTokens(b)));
+  return jaccard(new Set(canonicalTokens(a)), new Set(canonicalTokens(b)));
 }
 
 const CONTAINED_DUPLICATE = 0.85;
 const CONTAINED_OVERLAP = 0.6;
 
 function classify(a: string, b: string): { kind: MatchKind; similarity: number; reason: string } | null {
+  // "I have 2 kids" / "I have 3 kids": the same words apart from a number.
+  const words = (text: string) => [...new Set(canonicalTokens(text).filter((token) => !/^\d/.test(token)))].sort().join(' ');
+  if (words(a) && words(a) === words(b) && numbers(a).join(',') !== numbers(b).join(',')) {
+    return { kind: 'conflict', similarity: 0.9, reason: 'Same topic, different numbers' };
+  }
   const overlap = similarity(a, b);
   const contained = containment(a, b);
   if (overlap < CONFLICT_THRESHOLD && contained < CONTAINED_OVERLAP) return null;

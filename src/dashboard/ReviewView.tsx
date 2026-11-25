@@ -9,6 +9,7 @@ import { useToast } from '../ui/components/Toast';
 import { cx, plural } from '../ui/format';
 import { useFound } from '../ui/hooks/useFound';
 import type { Store } from '../ui/hooks/useStore';
+import { Help } from './help';
 
 /** Ask every chatbot that syncs to re-read what it remembers. */
 async function scanAll(store: Store): Promise<number> {
@@ -38,10 +39,10 @@ function Row({
   const [editing, setEditing] = useState(false);
   const changed = text !== item.text;
   return (
-    <li className={cx('flex items-start gap-3 px-3 py-2.5', !checked && 'opacity-60')}>
+    <li className={cx('flex items-start gap-3 py-3 pr-3.5 pl-4', !checked && 'opacity-60')}>
       <input
         type="checkbox"
-        className="mt-1 size-3.5 shrink-0 cursor-pointer accent-[var(--om-accent)]"
+        className="mt-1 size-4 shrink-0 cursor-pointer accent-(--om-brand)"
         checked={checked}
         onChange={(event) => onCheck(event.target.checked)}
         aria-label={`Keep: ${text}`}
@@ -70,22 +71,33 @@ function Row({
         ) : (
           <button
             type="button"
-            className="w-full cursor-text rounded text-left text-[13px] leading-relaxed text-ink hover:bg-subtle"
+            className="w-full cursor-text rounded text-left text-sm leading-normal text-ink hover:bg-subtle"
             title="Click to edit before keeping"
             onClick={() => setEditing(true)}
           >
             {text}
           </button>
         )}
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
           <span>
             {item.title ? `${item.title} · ` : ''}
             {item.source}
           </span>
+          {item.alsoOn && (
+            <span className="inline-flex items-center gap-1" title="Shown once here; your choice counts for every copy">
+              · Also on
+              {item.alsoOn.map((site) => (
+                <span key={site} className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full" style={{ background: SITES[site].color }} aria-hidden="true" />
+                  {SITES[site].label}
+                </span>
+              ))}
+            </span>
+          )}
           {changed && <Badge>Edited</Badge>}
         </p>
         {item.conflictsWith && (
-          <p className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-warn">
+          <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-relaxed text-warn">
             <AlertTriangle size={12} className="mt-px shrink-0" />
             <span>
               {item.conflictReason ?? 'Similar to a memory you have'}: “{item.conflictsWith}”. Starts unticked so you
@@ -188,10 +200,12 @@ export function ReviewView({ store }: { store: Store }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line px-6 pt-5 pb-3">
+      <header className="mx-auto flex w-full max-w-[900px] flex-wrap items-start gap-4 px-10 pt-8 pb-2 max-md:px-5">
         <div className="mr-auto">
-          <h1 className="text-base font-semibold">Review</h1>
-          <p className="text-xs text-ink-3">
+          <h1 className="flex items-center gap-1.5 text-[22px] font-semibold tracking-[-0.02em]">
+            Review <Help id="review.page" />
+          </h1>
+          <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-relaxed text-ink-2">
             {loading
               ? 'Loading…'
               : found.length === 0
@@ -205,7 +219,7 @@ export function ReviewView({ store }: { store: Store }) {
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 pt-4 pb-28">
+        <div className="mx-auto max-w-[900px] px-10 pt-2 pb-28 max-md:px-5">
 
           {assistant && showOriginal && found.length > 0 && (
             <div className="mt-3 flex justify-end">
@@ -239,14 +253,14 @@ export function ReviewView({ store }: { store: Store }) {
           {!aiMode && bySite.map(([site, items]) => {
             const allOn = items.every((item) => !unchecked.has(item.id));
             return (
-              <section key={site} className="mt-5">
+              <section key={site} className="mt-6">
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="size-2.5 rounded-full" style={{ background: SITES[site].color }} aria-hidden="true" />
-                  <h2 className="text-sm font-semibold">From {SITES[site].label}</h2>
+                  <span className="size-2 rounded-full" style={{ background: SITES[site].color }} aria-hidden="true" />
+                  <h2 className="text-[13.5px] font-semibold">From {SITES[site].label}</h2>
                   <span className="text-xs text-ink-3">{items.length}</span>
                   <button
                     type="button"
-                    className="ml-auto text-xs text-ink-2 hover:text-ink"
+                    className="ml-auto text-[12.5px] font-medium text-brand hover:text-brand-hover"
                     onClick={() =>
                       setUnchecked((current) => {
                         const next = new Set(current);
@@ -269,7 +283,7 @@ export function ReviewView({ store }: { store: Store }) {
                     Keep all {items.length}
                   </Button>
                 </div>
-                <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+                <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                   {items.map((item) => (
                     <Row
                       key={item.id}
@@ -310,14 +324,17 @@ export function ReviewView({ store }: { store: Store }) {
       </div>
 
       {found.length > 0 && !aiMode && (
-        <footer className="flex flex-wrap items-center gap-3 border-t border-line bg-surface px-6 py-3">
-          <p className="mr-auto text-xs text-ink-2">
-            Keep {keepCount}
-            {skipCount > 0 && <span className="text-ink-3"> · skip {skipCount}</span>}
-          </p>
-          <Button variant="primary" disabled={busy} onClick={() => void apply()}>
-            {keepCount > 0 ? `Keep ${keepCount} and sync` : `Skip ${skipCount}`}
-          </Button>
+        <footer className="mx-auto mb-5 flex w-[calc(100%-80px)] max-w-[820px] flex-wrap items-center gap-3 rounded-xl bg-accent py-2.5 pr-2.5 pl-[18px] text-accent-fg shadow-pop max-md:w-[calc(100%-40px)]">
+          <p className="text-[13px] font-medium">{keepCount} of {keepCount + skipCount} ticked</p>
+          <p className="mr-auto text-[12.5px] opacity-65">Unticked ones won’t be suggested again.</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void apply()}
+            className="h-[34px] rounded-lg bg-canvas px-3.5 text-[13px] font-semibold text-ink hover:opacity-90 disabled:opacity-50"
+          >
+            {keepCount > 0 ? `Keep and sync ${keepCount}` : `Skip ${skipCount}`}
+          </button>
         </footer>
       )}
     </div>

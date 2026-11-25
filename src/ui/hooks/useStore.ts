@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, type Memory, type Settings } from '../../core/types';
 import type { MemoryService } from '../../core/service';
 import { onChange } from '../../shared/change-bus';
 import { getService } from '../../shared/platform';
-import { applyTheme } from '../theme';
+import { applySiteColors, applyTheme } from '../theme';
 
 export interface Store {
   service: MemoryService;
@@ -40,6 +40,10 @@ export function useStore(): Store {
   useEffect(() => {
     if (!loading) applyTheme(settings.theme);
   }, [loading, settings.theme]);
+
+  useEffect(() => {
+    if (!loading) applySiteColors(settings.siteColors);
+  }, [loading, settings.siteColors]);
 
   const library = useMemo(() => memories.filter((m) => m.status !== 'deleted'), [memories]);
   const trash = useMemo(

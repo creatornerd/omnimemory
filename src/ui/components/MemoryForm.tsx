@@ -24,6 +24,7 @@ export interface MemoryFormValues {
   tags: string[];
   enabled: boolean;
   permissions: SitePermissions;
+  aiAllowed: boolean;
 }
 
 interface MemoryFormProps {
@@ -77,6 +78,7 @@ export function MemoryForm({
   const [permissions, setPermissions] = useState<SitePermissions>(
     initial?.permissions ?? defaultPermissions,
   );
+  const [aiAllowed, setAiAllowed] = useState(initial?.aiAllowed !== false);
   const [allowSensitive, setAllowSensitive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -141,6 +143,7 @@ export function MemoryForm({
         tags: tagText.split(',').map((tag) => tag.trim()).filter(Boolean),
         enabled,
         permissions,
+        aiAllowed,
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save this memory.');
@@ -172,7 +175,7 @@ export function MemoryForm({
         onChange={(event) => setContent(event.target.value)}
         rows={2}
         aria-label="Memory"
-        placeholder="Something worth remembering, e.g. “I program VEX robots using PROS and LemLib”"
+        placeholder="Something worth remembering, e.g. “I’m vegetarian” or “I prefer short answers”"
         className="field scroll-thin resize-none leading-relaxed"
       />
 
@@ -246,6 +249,8 @@ export function MemoryForm({
             enabled={enabled}
             onPermission={(site: SiteId, allowed) => setPermissions((p) => ({ ...p, [site]: allowed }))}
             onEnabled={setEnabled}
+            aiAllowed={aiAllowed}
+            onAiAllowed={checkRepeats ? setAiAllowed : undefined}
           />
         </div>
       </div>

@@ -1,5 +1,7 @@
 /**
  * Production build → dist/ (load this folder in chrome://extensions).
+ * With --firefox → dist-firefox/ (load it from about:debugging, or submit it
+ * to addons.mozilla.org). Same code; only the manifest differs.
  *
  * Three passes, because each part of an extension needs a different shape:
  *   1. popup.html + dashboard.html  → normal multi-page app build
@@ -9,12 +11,14 @@
 import { build } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = resolve(root, 'dist');
+const firefox = process.argv.includes('--firefox');
+const outDir = resolve(root, firefox ? 'dist-firefox' : 'dist');
+const target = firefox ? 'firefox128' : 'chrome120';
 const shared = { root, configFile: false, logLevel: 'warn', base: './' };
 
 await build({
@@ -23,7 +27,7 @@ await build({
   build: {
     outDir,
     emptyOutDir: true,
-    target: 'chrome120',
+    target,
     // Chrome supports modulepreload natively; the polyfill would add a fetch().
     modulePreload: { polyfill: false },
     rollupOptions: {
@@ -36,7 +40,7 @@ const single = (entry, fileName, format) => ({
   outDir,
   emptyOutDir: false,
   copyPublicDir: false,
-  target: 'chrome120',
+  target,
   rollupOptions: {
     input: resolve(root, entry),
     output: { format, entryFileNames: fileName, codeSplitting: false },
@@ -48,8 +52,25 @@ await build({ ...shared, plugins: [react()], build: single('src/content/index.ts
 
 // Fail loudly if the manifest points at anything that was not built.
 const manifest = JSON.parse(readFileSync(resolve(outDir, 'manifest.json'), 'utf8'));
+
+if (firefox) {
+  // Firefox runs MV3 backgrounds as event pages, not service workers, and
+  // needs an add-on id. Everything else in the manifest is shared.
+  const { service_worker: worker, type } = manifest.background;
+  manifest.background = { scripts: [worker], type };
+  delete manifest.minimum_chrome_version;
+  manifest.browser_specific_settings = {
+    gecko: {
+      id: 'omnimemory@creatornerd.github.io',
+      strict_min_version: '128.0',
+      data_collection_permissions: { required: ['none'] },
+    },
+  };
+  writeFileSync(resolve(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 const referenced = [
-  manifest.background.service_worker,
+  ...(manifest.background.scripts ?? [manifest.background.service_worker]),
   manifest.action.default_popup,
   manifest.options_page,
   ...Object.values(manifest.icons),
@@ -61,4 +82,8 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log(`\nBuilt extension → ${outDir}\nLoad it from chrome://extensions → Developer mode → Load unpacked.`);
+console.log(
+  firefox
+    ? `\nBuilt Firefox add-on → ${outDir}\nLoad it from about:debugging → This Firefox → Load Temporary Add-on (pick manifest.json).`
+    : `\nBuilt extension → ${outDir}\nLoad it from chrome://extensions → Developer mode → Load unpacked.`,
+);

@@ -1,4 +1,5 @@
-import type { OpResult, RemoteSnapshot, SyncOp } from '../../core/sync';
+import { sameMeaning, type OpResult, type RemoteSnapshot, type SyncOp } from '../../core/sync';
+import { send } from '../bridge';
 import { SyncError, siteRequest, wait } from './http';
 import type { MemorySyncAdapter } from './types';
 
@@ -26,6 +27,8 @@ const RPC = {
 } as const;
 
 const PAGE_SIZE = 100;
+/** Pause between changes, so a long list doesn't trip Gemini's rate limit. */
+const PAUSE_MS = 350;
 const MAX_PAGES = 5;
 
 interface Tokens {
@@ -34,8 +37,18 @@ interface Tokens {
   bl: string;
 }
 
-let tokens: Tokens | null = null;
+
+let tokens: { prefix: string; value: Tokens } | null = null;
 let requestCounter = Math.floor(Math.random() * 9000) + 1000;
+
+/**
+ * Gemini serves a second (third…) signed-in Google account under /u/1/,
+ * /u/2/… Requests must go to the same account the page is using, or they
+ * fail (or, worse, reach the first account).
+ */
+export function accountPrefix(pathname: string): string {
+  return /^\/u\/\d{1,2}(?=\/|$)/.exec(pathname)?.[0] ?? '';
+}
 
 function pick(source: string, key: string): string | null {
   const match = source.match(new RegExp(`"${key}":"([^"]+)"`));
@@ -50,21 +63,22 @@ function tokensFrom(source: string): Tokens | null {
 }
 
 async function getTokens(fresh = false): Promise<Tokens> {
-  if (tokens && !fresh) return tokens;
+  const prefix = accountPrefix(window.location.pathname);
+  if (tokens && tokens.prefix === prefix && !fresh) return tokens.value;
   // Gemini puts them in an inline <script> on every page.
   if (!fresh) {
     for (const script of document.querySelectorAll('script')) {
       const text = script.textContent ?? '';
       if (!text.includes('SNlM0e')) continue;
       const found = tokensFrom(text);
-      if (found) return (tokens = found);
+      if (found) return (tokens = { prefix, value: found }).value;
     }
   }
   // A long-lived tab may hold stale ones; the app page always has fresh ones.
-  const page = await siteRequest('/app');
-  const found = page.ok ? tokensFrom(await page.text()) : null;
+  const page = await siteRequest(`${prefix}/app`).catch(() => null);
+  const found = page?.ok ? tokensFrom(await page.text()) : null;
   if (!found) throw new SyncError('Sign in to Gemini to sync your memories.');
-  return (tokens = found);
+  return (tokens = { prefix, value: found }).value;
 }
 
 /** Pull the result of one call out of a batchexecute response. */
@@ -87,12 +101,24 @@ export function parseBatchResponse(body: string, rpcId: string): unknown {
   throw new SyncError('Gemini sent an unexpected reply.');
 }
 
-async function call(rpcId: string, payload: unknown, retry = true): Promise<unknown> {
-  const { at, sid, bl } = await getTokens(!retry);
+/** Waits before retrying a request that hit a passing problem. */
+const RETRY_WAITS = [1000, 3000];
+
+interface CallOptions {
+  /**
+   * May the same request be sent again after a network error or a server
+   * error? Not for "create": Gemini may have saved it already.
+   */
+  repeatable: boolean;
+}
+
+async function call(rpcId: string, payload: unknown, options: CallOptions, attempt = 0, fresh = false): Promise<unknown> {
+  const { at, sid, bl } = await getTokens(fresh);
+  const prefix = accountPrefix(window.location.pathname);
   requestCounter += 100000;
   const query = new URLSearchParams({
     rpcids: rpcId,
-    'source-path': '/app',
+    'source-path': `${prefix}/app`,
     bl,
     'f.sid': sid,
     hl: document.documentElement.lang || 'en',
@@ -103,23 +129,47 @@ async function call(rpcId: string, payload: unknown, retry = true): Promise<unkn
     'f.req': JSON.stringify([[[rpcId, JSON.stringify(payload), null, 'generic']]]),
     at,
   });
-  const response = await siteRequest(`/_/BardChatUi/data/batchexecute?${query}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Same-Domain': '1' },
-    body,
-  });
-  if ((response.status === 400 || response.status === 401 || response.status === 403) && retry) {
-    // Usually an expired token: fetch fresh ones once and try again.
-    return call(rpcId, payload, false);
+  const retry = async (factor = 1) => {
+    await wait(RETRY_WAITS[attempt] * factor);
+    return call(rpcId, payload, options, attempt + 1, fresh);
+  };
+
+  let response: Response;
+  try {
+    response = await siteRequest(`${prefix}/_/BardChatUi/data/batchexecute?${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Same-Domain': '1' },
+      body,
+    });
+  } catch {
+    if (options.repeatable && attempt < RETRY_WAITS.length) return retry();
+    throw new SyncError('Couldn’t reach Gemini. Check your connection; OmniMemory will try again later.');
   }
+
+  // Usually an expired token. Nothing was changed, so asking again is safe.
+  if ((response.status === 400 || response.status === 401 || response.status === 403) && !fresh) {
+    return call(rpcId, payload, options, attempt, true);
+  }
+  // Busy or a passing server problem: wait a moment and ask again.
+  if (response.status === 429 && attempt < RETRY_WAITS.length) return retry(2);
+  if (response.status >= 500 && options.repeatable && attempt < RETRY_WAITS.length) return retry();
   if (!response.ok) {
     throw new SyncError(
       response.status === 401 || response.status === 403
         ? 'Sign in to Gemini to sync your memories.'
-        : `Gemini returned an error (${response.status}).`,
+        : response.status === 429
+          ? 'Gemini is busy right now. OmniMemory will try again later.'
+          : `Gemini returned an error (${response.status}). OmniMemory will try again later.`,
     );
   }
-  return parseBatchResponse(await response.text(), rpcId);
+  const text = await response.text();
+  try {
+    return parseBatchResponse(text, rpcId);
+  } catch (error) {
+    // An odd reply to a read is usually a stale token: try once with fresh ones.
+    if (options.repeatable && !fresh) return call(rpcId, payload, options, attempt, true);
+    throw error;
+  }
 }
 
 function entryFrom(raw: unknown): { id: string; text: string } | null {
@@ -140,7 +190,7 @@ async function listAll(): Promise<{ id: string; text: string }[]> {
   const items: { id: string; text: string }[] = [];
   let pageToken: string | null = null;
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const result = await call(RPC.list, pageToken ? [PAGE_SIZE, pageToken] : [PAGE_SIZE]);
+    const result = await call(RPC.list, pageToken ? [PAGE_SIZE, pageToken] : [PAGE_SIZE], { repeatable: true });
     const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : [];
     for (const row of rows) {
       const entry = entryFrom(row);
@@ -153,26 +203,57 @@ async function listAll(): Promise<{ id: string; text: string }[]> {
 }
 
 export const geminiSync: MemorySyncAdapter = {
-  async read(): Promise<RemoteSnapshot> {
-    return { managed: await listAll(), readOnly: [] };
+  async read({ cache }): Promise<RemoteSnapshot> {
+    const managed = await listAll();
+    // Remember which Google account Gemini is used with, so a background
+    // sync tab opens that one rather than the first signed-in account.
+    const prefix = accountPrefix(window.location.pathname);
+    if ((cache.account ?? '') !== prefix) {
+      await send({ type: 'sync/cache', key: 'account', value: prefix }).catch(() => {});
+    }
+    return { managed, readOnly: [] };
   },
 
   async apply(op: SyncOp): Promise<OpResult> {
     try {
       switch (op.op) {
         case 'create': {
-          const entry = savedEntry(await call(RPC.create, [[null, op.text]]));
-          await wait(250);
+          let entry: { id: string; text: string } | null = null;
+          try {
+            entry = savedEntry(await call(RPC.create, [[null, op.text]], { repeatable: false }));
+          } catch (error) {
+            // Gemini may have saved it even though the reply went wrong. Look
+            // before reporting a failure, or the next sync adds a second copy.
+            await wait(600);
+            entry = (await listAll().catch(() => [])).find((item) => sameMeaning(item.text, op.text)) ?? null;
+            if (!entry) throw error;
+          }
+          await wait(PAUSE_MS);
           return { ok: true, remoteId: entry.id, remoteText: entry.text };
         }
         case 'update': {
-          const entry = savedEntry(await call(RPC.update, [[op.remoteId, op.text], [['text']]]));
-          await wait(250);
-          return { ok: true, remoteId: entry.id, remoteText: entry.text };
+          try {
+            const entry = savedEntry(await call(RPC.update, [[op.remoteId, op.text], [['text']]], { repeatable: true }));
+            await wait(PAUSE_MS);
+            return { ok: true, remoteId: entry.id, remoteText: entry.text };
+          } catch (error) {
+            // The change may have gone through anyway.
+            const entry = (await listAll().catch(() => [])).find((item) => item.id === op.remoteId);
+            if (entry && sameMeaning(entry.text, op.text)) return { ok: true, remoteId: entry.id, remoteText: entry.text };
+            throw error;
+          }
         }
         case 'delete':
-          await call(RPC.remove, [op.remoteId]);
-          await wait(250);
+          try {
+            await call(RPC.remove, [op.remoteId], { repeatable: true });
+          } catch (error) {
+            // Gone is gone, whatever Gemini replied.
+            const still = await listAll()
+              .then((items) => items.some((item) => item.id === op.remoteId))
+              .catch(() => true);
+            if (still) throw error;
+          }
+          await wait(PAUSE_MS);
           return { ok: true };
         default:
           return { ok: false, error: 'Gemini doesn’t support this change.' };

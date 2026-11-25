@@ -1,5 +1,5 @@
 import { MAX_CONTENT_LENGTH, isSiteId } from '../core/types';
-import { getService, getSyncService, openDashboard, setPendingCapture } from '../shared/platform';
+import { getAssistant, getService, getSyncService, openDashboard, setPendingCapture } from '../shared/platform';
 import { siteFromUrl } from '../shared/sites';
 import { handleRequest } from './router';
 import { closeStaleBackgroundTabs, finishBackgroundTab, scheduleSync, syncSite, updateBadge } from './sync-scheduler';
@@ -13,7 +13,8 @@ import { closeStaleBackgroundTabs, finishBackgroundTab, scheduleSync, syncSite, 
  *  - decides when each chatbot's own memory needs syncing (the requests to
  *    the chatbot are made by the content script on that chatbot's site).
  *
- * It makes no network requests of its own.
+ * Its only network requests are the optional AI assistant's (to Gemini, when
+ * the user presses "Suggest from this chat"); the key never reaches a page.
  */
 
 const MENU_ID = 'omnimemory-save-selection';
@@ -23,10 +24,13 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     void chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#/welcome') });
   }
-  chrome.contextMenus.create({
-    id: MENU_ID,
-    title: 'Save selection to OmniMemory…',
-    contexts: ['selection'],
+  // removeAll first, so an update doesn't try to add the same menu twice.
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: MENU_ID,
+      title: 'Save selection to OmniMemory…',
+      contexts: ['selection'],
+    });
   });
   void getService().purgeExpired();
 });
@@ -59,7 +63,8 @@ chrome.contextMenus.onClicked.addListener((info) => {
   })();
 });
 
-const extensionOrigin = `chrome-extension://${chrome.runtime.id}/`;
+// chrome-extension://<id>/ in Chrome, moz-extension://<uuid>/ in Firefox.
+const extensionOrigin = chrome.runtime.getURL('');
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false;
@@ -86,6 +91,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sync: getSyncService(),
     openDashboard,
     onSyncFinished: (finished) => void finishBackgroundTab(finished),
+    assistant: getAssistant,
   })
     .then(sendResponse)
     .catch(() => sendResponse({ ok: false, error: 'Something went wrong. Please try again.' }));

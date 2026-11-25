@@ -11,18 +11,25 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), '../public/icons');
-const INK = [28, 28, 26];
-const PAPER = [255, 255, 255];
+const INK = [27, 27, 25];
+const PAPER = [250, 250, 248];
+const BLUE = [59, 91, 219];
 
 // Geometry in the logo's 24×24 design space.
 const roundedSquare = (x, y) => {
-  const r = 6;
+  const r = 6.5;
   const dx = Math.abs(x - 12) - (12 - r);
   const dy = Math.abs(y - 12) - (12 - r);
   return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - r;
 };
-const ring = (x, y) => Math.abs(Math.hypot(x - 11, y - 13) - 5) - 1.1;
-const dot = (x, y) => Math.hypot(x - 17.4, y - 6.6) - 2;
+// Two overlapping rings; the lens where they overlap is filled blue.
+const R = 5.2;
+const leftDisc = (x, y) => Math.hypot(x - 9.2, y - 12) - R;
+const rightDisc = (x, y) => Math.hypot(x - 14.8, y - 12) - R;
+const lens = (x, y) => Math.max(leftDisc(x, y), rightDisc(x, y));
+const ringWidth = (size) => (size <= 16 ? 1.9 : size <= 32 ? 1.7 : 1.6) / 2;
+const ring = (x, y, size) =>
+  Math.min(Math.abs(leftDisc(x, y)), Math.abs(rightDisc(x, y))) - ringWidth(size);
 
 function render(size) {
   const scale = 24 / size;
@@ -33,9 +40,13 @@ function render(size) {
       const x = (px + 0.5) * scale;
       const y = (py + 0.5) * scale;
       const body = coverage(roundedSquare(x, y));
-      const mark = Math.max(coverage(ring(x, y)), coverage(dot(x, y)));
+      const fill = coverage(lens(x, y));
+      const mark = coverage(ring(x, y, size));
       const i = (py * size + px) * 4;
-      for (let c = 0; c < 3; c += 1) pixels[i + c] = Math.round(INK[c] + (PAPER[c] - INK[c]) * mark);
+      for (let c = 0; c < 3; c += 1) {
+        const base = INK[c] + (BLUE[c] - INK[c]) * fill;
+        pixels[i + c] = Math.round(base + (PAPER[c] - base) * mark);
+      }
       pixels[i + 3] = Math.round(body * 255);
     }
   }

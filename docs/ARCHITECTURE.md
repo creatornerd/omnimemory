@@ -366,17 +366,23 @@ through `router.ts`. Writes from MCP could be set to require confirmation in the
 
 `core/ai.ts` builds the requests and checks the replies; `shared/gemini.ts` is the only code that calls
 Google (`POST /v1beta/models/{gemini-3.5-flash-lite | gemini-3.5-flash}:generateContent`, key in the `x-goog-api-key` header,
-JSON output with a response schema, temperature 0, two retries on 5xx). It runs only on extension pages
-(dashboard, popup), never on a chatbot page or in the service worker.
+JSON output with a response schema, temperature 0, two retries on 5xx). It runs on extension pages
+(dashboard, popup) and in the service worker (for the on-page ✦ button, so the key never reaches a chatbot
+page). Key order: the user's session-only key, then their saved key, then the optional build-time shared key
+(`VITE_OMNI_SHARED_GEMINI_KEY` from git-ignored `.env.local`). Each successful request on the shared key counts
+toward `SHARED_DAILY_LIMIT` (10) per local day, stored in `settings/secret:ai-usage`; the limit is client-side,
+so a public release should move the shared key behind a server.
 
 | Use | Sent | Reply | What the UI does |
 | --- | --- | --- | --- |
 | `checkRepeat` | the note being saved + up to 200 shareable memories | `[{index, duplicate\|conflict, reason}]` | MemoryForm shows them before saving; "Save anyway" keeps both. Fails open: an AI error never blocks saving. |
 | `scanLibrary` | up to 400 shareable memories | groups `{indexes, kind, reason, merged}` | Find repeats dialog: merge (via `MemoryService.merge`, reversible) or keep one. |
 | `chat` (Assistant page, Gemini 3.5 Flash, falls back to Flash Lite on 5xx) | the conversation (last 12 turns) + up to 400 shareable memories, numbered | `{reply, changes: [{add\|edit\|delete, index, text, category}]}` | A checklist of proposed changes; Apply runs them through MemoryService (deletes go to Recently Deleted) and records an undo set. Stale proposals (memory changed since) are refused. |
+| `suggestFromChat` (on-page ✦, via the service worker) | the visible chat (credential-looking lines removed) + AI-readable memories | `{notes: [{text, category}]}` | The panel lists them to tick and save; anything the text rules find in the library (private memories included) is dropped first. |
 | `planImport` | Review-page finds + up to 400 shareable memories | notes `{text, category, sources, existing, conflict}` + `dropped` | Review page's tidy list. Every find ends up in a note, in "already have" or in "left out" — never silently dropped. |
 
-Rules: `aiCanRead` excludes private (`enabled: false`), deleted and credential-like memories; replies are
+Rules: `aiCanRead` excludes private (`enabled: false`), not-shared-with-any-chatbot, `aiAllowed: false`,
+deleted and credential-like memories (merging keeps `aiAllowed: false`); replies are
 validated (indexes in range, each memory/find used once, enum values only) and any model-written text that
 looks like a credential is discarded. The key lives in IndexedDB under `settings/secret:gemini-key`, separate
 from the settings object, so it's never exported or passed to the router.

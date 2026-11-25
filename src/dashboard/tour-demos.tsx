@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowRight, Check, Lock, Pencil, Send } from 'lucide-react';
+import { ArrowRight, ArrowUp, Check, Lock, Minus, Pencil, Send, Sparkles } from 'lucide-react';
 import type { SiteId } from '../core';
 import { SITES } from '../shared/sites';
 import { Logo } from '../ui/components/primitives';
@@ -64,12 +64,19 @@ function useTyped(text: string, active: boolean, msPerChar = 32): string {
 function Cursor({ x, y, clicking }: { x: string | number; y: string | number; clicking?: boolean }) {
   return (
     <div
-      className="pointer-events-none absolute z-30 transition-[left,top] duration-500 ease-in-out"
-      style={{ left: x, top: y }}
+      className="pointer-events-none absolute z-30 transition-[left,top] duration-[650ms]"
+      style={{ left: x, top: y, transitionTimingFunction: 'cubic-bezier(0.45, 0, 0.2, 1)' }}
       aria-hidden="true"
     >
-      {clicking && <span className="animate-click absolute -top-2.5 -left-2.5 size-5 rounded-full bg-focus/50" />}
-      <svg width="16" height="20" viewBox="0 0 16 20" className="drop-shadow">
+      {clicking && (
+        <span className="animate-click absolute -top-3 -left-3 size-6 rounded-full border-2 border-focus bg-focus/20" />
+      )}
+      <svg
+        width="16"
+        height="20"
+        viewBox="0 0 16 20"
+        className={cx('origin-top-left drop-shadow-md transition-transform duration-150', clicking && 'scale-[0.82]')}
+      >
         <path
           d="M1.5 1.5 L1.5 15.5 L5.2 12 L8 18.4 L10.4 17.3 L7.7 11 L12.8 11 Z"
           fill="white"
@@ -92,7 +99,7 @@ function Stage({ children, label }: { children: ReactNode; label: string }) {
     <div
       role="img"
       aria-label={label}
-      className="relative h-[258px] overflow-hidden rounded-xl border border-line bg-subtle select-none"
+      className="animate-rise relative h-[258px] overflow-hidden rounded-xl border border-line bg-subtle select-none"
     >
       {children}
     </div>
@@ -121,7 +128,7 @@ const HUB_PATHS: [SiteId, string][] = [
   ['gemini', 'M144 64 L144 112'],
 ];
 
-const HUB_NOTES = ['I program VEX robots', 'Keep answers short', 'I’m in 10th grade', 'I prefer metric units'];
+const HUB_NOTES = ['I’m vegetarian', 'Keep answers short', 'I live in Seattle', 'I prefer metric units'];
 
 export function HubDemo() {
   const reduced = useReducedMotion();
@@ -138,16 +145,29 @@ export function HubDemo() {
         {HUB_PATHS.map(([site, d], index) => (
           <g key={site}>
             <path d={d} stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
-            {!reduced && (
-              <circle r="3.5" fill={SITES[site].color}>
-                <animateMotion dur="1.6s" begin={`${index * 0.25}s`} repeatCount="indefinite" path={d} />
-              </circle>
-            )}
+            {!reduced &&
+              [0, 0.12, 0.24].map((lag, trail) => (
+                <circle key={trail} r={3.5 - trail} style={{ fill: SITES[site].color }} opacity={1 - trail * 0.35}>
+                  <animateMotion
+                    dur="1.8s"
+                    begin={`${index * 0.3 + lag}s`}
+                    repeatCount="indefinite"
+                    path={d}
+                    keyPoints="0;1"
+                    keyTimes="0;1"
+                    calcMode="spline"
+                    keySplines="0.4 0 0.2 1"
+                  />
+                </circle>
+              ))}
           </g>
         ))}
       </svg>
-      <div className="absolute top-[88px] left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-surface p-1.5 shadow-pop">
-        <Logo size={40} />
+      <div className="absolute top-[88px] left-1/2 -translate-x-1/2 -translate-y-1/2">
+        {!reduced && <span className="animate-glow absolute inset-0 rounded-2xl bg-ink/20" aria-hidden="true" />}
+        <div className="relative rounded-2xl bg-surface p-1.5 shadow-pop">
+          <Logo size={40} />
+        </div>
       </div>
       {(
         [
@@ -220,8 +240,8 @@ function ToolbarScene({ onDone }: { onDone?: () => void }) {
                 ))}
                 <span
                   className={cx(
-                    'ml-auto rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-accent-fg transition-opacity',
-                    phase === 5 && 'opacity-80',
+                    'ml-auto rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-accent-fg transition-transform',
+                    phase === 5 && 'scale-95',
                   )}
                 >
                   Save
@@ -320,15 +340,15 @@ function PageScene({ onDone }: { onDone?: () => void }) {
 // ── Step 2c: insert into a chat ────────────────────────────────────────────
 
 const SUGGESTED = [
-  { text: 'I program VEX robots using PROS', on: true },
-  { text: 'Practice is Tue and Thu after school', on: true },
+  { text: 'I’m vegetarian', on: true },
+  { text: 'I cook for a family of four', on: true },
   { text: 'I prefer metric units', on: false },
 ];
 
 function ChatScene({ onDone }: { onDone?: () => void }) {
   //               type  move  click panel move click inserted
   const phase = useTimeline([1600, 650, 350, 1300, 650, 350, 2600], onDone);
-  const typed = useTyped('Help me plan robotics practice this week', true);
+  const typed = useTyped('Help me plan easy dinners for this week', true);
   const panel = phase >= 3 && phase <= 5;
   const inserted = phase >= 6;
   const cursor =
@@ -372,7 +392,7 @@ function ChatScene({ onDone }: { onDone?: () => void }) {
             <span
               className={cx(
                 'rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-accent-fg transition-opacity',
-                phase === 5 && 'opacity-80',
+                phase === 5 && 'scale-95',
               )}
             >
               Insert 2
@@ -384,8 +404,8 @@ function ChatScene({ onDone }: { onDone?: () => void }) {
         {inserted && (
           <div className="animate-pop mb-1.5 rounded-md border border-line bg-subtle px-2 py-1 text-[11px] leading-relaxed text-ink-2">
             <p className="font-medium text-ink">Context from OmniMemory:</p>
-            <p>• I program VEX robots using PROS</p>
-            <p>• Practice is Tue and Thu after school</p>
+            <p>• I’m vegetarian</p>
+            <p>• I cook for a family of four</p>
           </div>
         )}
         <p className="min-h-5 text-xs">
@@ -556,8 +576,8 @@ export function SyncDemo() {
   const written = phase >= 4;
   const edited = phase >= 5;
   const updated = phase >= 6;
-  const vex = edited ? 'I program VEX robots in C++' : 'I program VEX robots';
-  const remoteVex = updated ? 'I program VEX robots in C++' : 'I program VEX robots';
+  const job = edited ? 'I work as a nurse, on night shifts' : 'I work as a nurse';
+  const remoteVex = updated ? 'I work as a nurse, on night shifts' : 'I work as a nurse';
   const cursor =
     phase === 0 || phase === 7
       ? { x: 330, y: 220 }
@@ -566,7 +586,7 @@ export function SyncDemo() {
         : phase <= 4
           ? { x: 160, y: 244 }
           : { x: 150, y: 64 };
-  const lines = [`- ${remoteVex}`, '- I’m in 10th grade'];
+  const lines = [`- ${remoteVex}`, '- I live in Seattle'];
   return (
     <Stage label="Approving the first sync, memories appearing in Claude's instructions, and an edit following them there">
       <div className="absolute top-5 left-5 w-[230px] rounded-lg border border-line bg-surface p-3 shadow-pop">
@@ -581,9 +601,9 @@ export function SyncDemo() {
             )}
           >
             {phase === 5 && <Pencil size={10} className="shrink-0 text-warn" />}
-            {vex}
+            {job}
           </li>
-          <li className="px-1.5 py-1">I’m in 10th grade</li>
+          <li className="px-1.5 py-1">I live in Seattle</li>
         </ul>
       </div>
       {asking && (
@@ -592,7 +612,7 @@ export function SyncDemo() {
           <span
             className={cx(
               'mt-1.5 inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-accent-fg transition-opacity',
-              phase === 2 && 'opacity-80',
+              phase === 2 && 'scale-95',
             )}
           >
             <Check size={11} /> Approve all 2 for Claude
@@ -638,6 +658,119 @@ export function SyncDemo() {
         <p className="mt-1.5 text-[11px] text-ink-3">Anything you wrote yourself stays as it is.</p>
       </div>
       <Cursor {...cursor} clicking={phase === 2} />
+    </Stage>
+  );
+}
+
+// ── Middle step: the AI assistant ──────────────────────────────────────────
+
+const AI_CHANGES: { kind: 'edit' | 'delete'; text: string; to?: string }[] = [
+  { kind: 'edit', text: 'I like my answers short-ish', to: 'I prefer short answers' },
+  { kind: 'delete', text: 'I’ve asked how to fix my resume' },
+  { kind: 'delete', text: 'Cooking is the clearest area for tailoring …' },
+];
+
+export function AssistantDemo() {
+  //               type  move click think reply move click done
+  const phase = useTimeline([1500, 550, 300, 1300, 1700, 600, 300, 2200]);
+  const typed = useTyped('Remove the repeats', true, 45);
+  const sent = phase >= 3;
+  const replied = phase >= 4;
+  const applied = phase >= 7;
+  const cursor =
+    phase === 0
+      ? { x: '55%', y: 150 }
+      : phase <= 2
+        ? { x: 'calc(100% - 38px)', y: 222 }
+        : phase <= 4
+          ? { x: 'calc(100% - 60px)', y: 120 }
+          : { x: 84, y: 172 };
+  return (
+    <Stage label="Asking the Assistant to remove repeats, reviewing its suggested changes and applying them">
+      <div className="absolute inset-x-0 top-0 flex h-10 items-center gap-2 border-b border-line bg-surface px-3 text-xs">
+        <Sparkles size={13} />
+        <span className="font-medium">Assistant</span>
+        <span
+          className={cx(
+            'ml-auto rounded-full px-2 py-0.5 text-[11px] transition-colors duration-500',
+            applied ? 'bg-ok-soft text-ok' : 'bg-subtle text-ink-3',
+          )}
+        >
+          {applied ? '9 → 7 memories' : '9 memories'}
+        </span>
+      </div>
+      <div className="absolute inset-x-3 top-12 bottom-[50px] space-y-1.5 overflow-hidden">
+        {sent && (
+          <div className="flex justify-end">
+            <p className="animate-pop rounded-2xl rounded-br-md bg-accent px-3 py-1.5 text-xs text-accent-fg">Remove the repeats</p>
+          </div>
+        )}
+        {sent && !replied && (
+          <div className="flex items-center gap-1 pl-1" aria-hidden="true">
+            {[0, 1, 2].map((dot) => (
+              <span key={dot} className="animate-dot size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${dot * 150}ms` }} />
+            ))}
+          </div>
+        )}
+        {replied && (
+          <div className="animate-pop">
+            <p className="text-xs">I reworded one note and removed remarks about past chats.</p>
+            <div className="mt-1 overflow-hidden rounded-lg border border-line bg-surface">
+              {AI_CHANGES.map((change, index) => (
+                <div
+                  key={index}
+                  className={cx(
+                    'animate-pop flex items-center gap-1.5 border-b border-line px-2 py-[3px] text-[11px] last:border-b-0 transition-opacity duration-500',
+                    applied && change.kind === 'delete' && 'opacity-40',
+                  )}
+                  style={{ animationDelay: `${150 + index * 120}ms`, animationFillMode: 'backwards' }}
+                >
+                  {change.kind === 'edit' ? (
+                    <Pencil size={10} className="shrink-0 text-ink-2" />
+                  ) : (
+                    <Minus size={10} className="shrink-0 text-danger" />
+                  )}
+                  <span className={cx('truncate', change.kind === 'delete' && 'line-through decoration-ink-3/60')}>
+                    {change.to ?? change.text}
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 bg-subtle/70 px-2 py-1">
+                {applied ? (
+                  <span className="animate-pop flex items-center gap-1 text-[11px] text-ok">
+                    <Check size={11} /> Applied · Undo
+                  </span>
+                ) : (
+                  <span
+                    className={cx(
+                      'inline-flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-fg transition-transform',
+                      phase === 6 && 'scale-95',
+                    )}
+                  >
+                    <Check size={10} /> Apply 3 changes
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-xl border border-line-strong bg-surface px-2.5 py-1.5">
+        <span className="min-h-4 flex-1 text-xs">
+          {!sent && typed}
+          {phase === 0 && <Caret />}
+          {sent && <span className="text-ink-3">Ask to add, fix, merge or remove…</span>}
+        </span>
+        <span
+          className={cx(
+            'flex size-6 items-center justify-center rounded-md bg-accent text-accent-fg transition-transform',
+            phase === 2 && 'scale-90',
+          )}
+        >
+          <ArrowUp size={12} />
+        </span>
+      </div>
+      <Cursor {...cursor} clicking={phase === 2 || phase === 6} />
     </Stage>
   );
 }

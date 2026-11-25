@@ -1,9 +1,9 @@
-import { CircleSlash, History, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, CircleSlash, History, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import type { Memory, MemoryService, Settings } from '../core';
 import { sourceLabel } from '../shared/sites';
 import { MemoryForm } from '../ui/components/MemoryForm';
 import { Badge, IconButton } from '../ui/components/primitives';
-import { SiteToggles } from '../ui/components/SiteToggles';
+import { ShareMenu } from '../ui/components/ShareMenu';
 import { useToast } from '../ui/components/Toast';
 import { cx, fullDate, timeAgo } from '../ui/format';
 import { repeatCheck } from '../ui/hooks/repeat-check';
@@ -35,8 +35,8 @@ const HISTORY_LABELS: Record<string, string> = {
 function HistoryList({ memory }: { memory: Memory }) {
   const entries = [...memory.history].reverse();
   return (
-    <details className="rounded-md border border-line text-xs">
-      <summary className="flex items-center gap-1.5 px-2.5 py-1.5 text-ink-2 select-none hover:text-ink">
+    <details className="rounded-lg border border-line text-xs">
+      <summary className="flex items-center gap-1.5 px-3 py-2 text-ink-2 select-none hover:text-ink">
         <History size={12} />
         History · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
       </summary>
@@ -76,7 +76,7 @@ export function MemoryRow({
 
   if (editing) {
     return (
-      <li className="animate-rise border-b border-line bg-surface px-4 py-3.5">
+      <li className="animate-rise border-b border-line bg-surface p-4 shadow-[inset_0_0_0_1.5px_var(--om-brand)] last:border-b-0">
         <MemoryForm
           editingId={memory.id}
           initial={memory}
@@ -100,18 +100,25 @@ export function MemoryRow({
   return (
     <li
       className={cx(
-        'group flex gap-3 border-b border-line px-4 transition-colors',
-        compact ? 'items-center py-1.5' : 'items-start py-3',
-        selected ? 'bg-subtle' : 'hover:bg-subtle',
+        'group flex gap-3.5 border-b border-line py-3.5 pr-3.5 pl-4 transition-colors first:rounded-t-[13px] last:rounded-b-[13px] last:border-b-0',
+        compact ? 'items-center py-2' : 'items-start',
+        selected ? 'bg-brand-soft' : 'hover:bg-subtle',
       )}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={(event) => onSelect(event.target.checked)}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
         aria-label={`Select memory: ${memory.content.slice(0, 60)}`}
-        className={cx('size-3.5 shrink-0 accent-(--om-accent)', !compact && 'mt-1')}
-      />
+        onClick={() => onSelect(!selected)}
+        className={cx(
+          'flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors',
+          !compact && 'mt-0.5',
+          selected ? 'border-brand bg-brand text-brand-fg' : 'border-line-strong bg-surface hover:border-ink-3',
+        )}
+      >
+        {selected && <Check size={12} strokeWidth={3} />}
+      </button>
 
       <button
         type="button"
@@ -121,7 +128,7 @@ export function MemoryRow({
       >
         <p
           className={cx(
-            'text-[13px] leading-relaxed',
+            'text-sm leading-normal',
             compact ? 'truncate' : 'line-clamp-3 whitespace-pre-line',
             (outdated || !memory.enabled) && 'text-ink-2',
             outdated && 'line-through decoration-ink-3',
@@ -130,9 +137,10 @@ export function MemoryRow({
           {memory.content}
         </p>
         {!compact && (
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
+          <p className="mt-[5px] flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
             <Badge>{memory.category}</Badge>
             {outdated && <Badge tone="warn">Outdated</Badge>}
+            {!memory.enabled && <Badge>Private</Badge>}
             {memory.tags.map((tag) => (
               <span key={tag}>#{tag}</span>
             ))}
@@ -144,37 +152,39 @@ export function MemoryRow({
       </button>
 
       {compact && (
-        <span className="hidden shrink-0 items-center gap-2 text-[11px] text-ink-3 md:flex">
+        <span className="hidden shrink-0 items-center gap-2 text-xs text-ink-3 md:flex">
           {outdated && <Badge tone="warn">Outdated</Badge>}
           <span className="w-20 truncate">{memory.category}</span>
           <span className="w-14 text-right">{timeAgo(memory.updated_at)}</span>
         </span>
       )}
 
-      <div className="flex shrink-0 items-center gap-2">
-        <SiteToggles
-          permissions={memory.permissions}
-          enabled={memory.enabled}
-          onPermission={(site, allowed) =>
-            void service.update(memory.id, { permissions: { [site]: allowed } })
-          }
-          onEnabled={(enabled) => void service.update(memory.id, { enabled })}
-        />
-        <div className="flex">
-          <IconButton label="Edit" onClick={() => onEdit(true)}>
-            <Pencil size={14} />
-          </IconButton>
-          <IconButton
-            label={outdated ? 'Mark as current' : 'Mark as outdated (stops sharing, keeps the memory)'}
-            active={outdated}
-            onClick={() => void service.setOutdated([memory.id], !outdated)}
-          >
-            {outdated ? <RotateCcw size={14} /> : <CircleSlash size={14} />}
-          </IconButton>
-          <IconButton label="Delete" tone="danger" onClick={onDelete}>
-            <Trash2 size={14} />
-          </IconButton>
-        </div>
+      <ShareMenu
+        permissions={memory.permissions}
+        enabled={memory.enabled}
+        onPermission={(site, allowed) => void service.update(memory.id, { permissions: { [site]: allowed } })}
+        onEnabled={(enabled) => void service.update(memory.id, { enabled })}
+        {...(settings.aiEnabled
+          ? {
+              aiAllowed: memory.aiAllowed,
+              onAiAllowed: (allowed: boolean) => void service.update(memory.id, { aiAllowed: allowed }),
+            }
+          : {})}
+      />
+      <div className="flex shrink-0 gap-0.5">
+        <IconButton label="Edit" onClick={() => onEdit(true)}>
+          <Pencil size={14} />
+        </IconButton>
+        <IconButton
+          label={outdated ? 'Mark as current' : 'Mark as outdated (stops sharing, keeps the memory)'}
+          active={outdated}
+          onClick={() => void service.setOutdated([memory.id], !outdated)}
+        >
+          {outdated ? <RotateCcw size={14} /> : <CircleSlash size={14} />}
+        </IconButton>
+        <IconButton label="Delete" tone="danger" onClick={onDelete}>
+          <Trash2 size={14} />
+        </IconButton>
       </div>
     </li>
   );

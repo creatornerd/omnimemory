@@ -1,4 +1,4 @@
-import type { FoundItem } from './discover';
+import { textKey, type FoundItem } from './discover';
 import { sharingBlock, isShareableWith } from './permissions';
 import { findSensitive } from './sensitive';
 import { normalizeText } from './text';
@@ -185,6 +185,8 @@ export interface HeldChange {
   remoteText?: string;
   /** delete: was the entry linked by an older version that didn't track ownership? */
   legacy?: boolean;
+  /** delete: a second copy of an entry that's already linked to this memory. */
+  repeat?: boolean;
   /** first-write: what would be written. */
   preview?: { action: 'add' | 'update' | 'remove'; text: string }[];
 }
@@ -250,7 +252,7 @@ export function emptySyncState(site: SiteId): SiteSyncState {
 export type SyncOp =
   | { op: 'create'; memoryId: string; text: string }
   | { op: 'update'; memoryId: string; remoteId: string; text: string }
-  | { op: 'delete'; memoryId: string | null; remoteId: string }
+  | { op: 'delete'; memoryId: string | null; remoteId: string; text?: string }
   | {
       op: 'set-block';
       lines: { memoryId: string; text: string }[];
@@ -352,11 +354,21 @@ export function parseBlock(field: string): { outside: string; lines: string[]; p
     else if (lastEnd >= 0) inBlock = false;
   });
 
-  const outside = rows
-    .filter((_, index) => !ours[index])
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  // Keep the user's own text exactly, blank lines included; only drop the
+  // one extra blank line left where the block was taken out.
+  const kept: string[] = [];
+  let afterBlock = false;
+  rows.forEach((row, index) => {
+    if (ours[index]) {
+      afterBlock = true;
+      return;
+    }
+    const blank = row.trim() === '';
+    if (afterBlock && blank && (kept.length === 0 || kept[kept.length - 1].trim() === '')) return;
+    afterBlock = false;
+    kept.push(row);
+  });
+  const outside = kept.join('\n').trim();
   const lines: string[] = [];
   for (const row of rows.filter((_, index) => ours[index])) {
     const line = cleanLine(row);
@@ -392,6 +404,32 @@ export function readBlockField(
     blockBudget: Math.max(0, Math.min(limits.block, limits.field - (outside ? outside.length + 2 : 0))),
     needsRewrite: present && composeBlockField(outside, lines) !== field,
   };
+}
+
+/**
+ * The field to write, or null when writing it would change anything outside
+ * OmniMemory's block. Belt and braces: composeBlockField already keeps the
+ * user's own text, but a sync must never be able to overwrite it, whatever
+ * odd text the field held.
+ */
+export function safeBlockField(current: string, lines: string[]): string | null {
+  const { outside } = parseBlock(current);
+  const next = composeBlockField(outside, lines);
+  return parseBlock(next).outside === outside && next.startsWith(outside) ? next : null;
+}
+
+/**
+ * Did a block write land? Compared loosely: chatbots may tidy spacing or a
+ * full stop when they save, which isn't a failure.
+ */
+export function blockLanded(field: string, outside: string, lines: string[]): boolean {
+  const after = parseBlock(field);
+  const flat = (text: string) => text.replace(/\s+/g, ' ').trim();
+  return (
+    flat(after.outside) === flat(outside) &&
+    after.lines.length === lines.length &&
+    after.lines.every((line, index) => sameMeaning(line, lines[index]))
+  );
 }
 
 /** Put the block back into the field, after the user's own text. */
@@ -546,7 +584,22 @@ function planItems({ site, memories, settings, state, remote, now }: PlanInput):
 
   // Entries on the chatbot that OmniMemory doesn't know about yet.
   const unlinked = remote.managed.filter((entry) => !linkedRemote.has(entry.id));
+  const dismissed = new Set(state.dismissed);
   for (const entry of unlinked) {
+    // A second copy of something already linked (a save that went through
+    // twice, say). Offer to remove the extra one, once; never on its own.
+    const twin = links.find((link) => {
+      const memory = byId.get(link.memoryId);
+      return link.remoteId && remoteById.has(link.remoteId) && memory && sameMeaning(memory.content, entry.text);
+    });
+    if (twin) {
+      const key = `delete:${entry.id}`;
+      if (approved.has(key)) ops.push({ op: 'delete', memoryId: null, remoteId: entry.id, text: entry.text });
+      else if (!dismissed.has(textKey(entry.text))) {
+        held.push({ key, kind: 'delete', memoryId: twin.memoryId, memoryText: byId.get(twin.memoryId)?.content, remoteText: entry.text, repeat: true });
+      }
+      continue;
+    }
     // Already there with the same wording: don't add a second copy. Linking
     // it would let OmniMemory edit and remove the chatbot's own entry, so
     // that waits for the user's OK.
@@ -725,7 +778,7 @@ export function applyResults(
       case 'delete': {
         const gone = links.find((link) => link.remoteId === op.remoteId);
         links = links.filter((link) => link.remoteId !== op.remoteId);
-        activity.push({ kind: 'removed', text: gone?.remoteText ?? gone?.pushedText ?? '', memoryId: op.memoryId });
+        activity.push({ kind: 'removed', text: gone?.remoteText ?? gone?.pushedText ?? op.text ?? '', memoryId: op.memoryId });
         break;
       }
       case 'set-block': {

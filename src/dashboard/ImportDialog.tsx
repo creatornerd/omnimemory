@@ -163,7 +163,7 @@ export function ImportDialog({ open, library, service, onClose }: ImportDialogPr
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 size-3.5 accent-(--om-accent)"
+                      className="mt-1 size-3.5 accent-(--om-brand)"
                       disabled={!enabled}
                       checked={candidate.selected && enabled}
                       onChange={(event) =>

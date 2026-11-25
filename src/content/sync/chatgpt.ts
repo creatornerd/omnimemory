@@ -1,6 +1,7 @@
 import {
   BLOCK_FIELD_LIMIT,
-  composeBlockField,
+  blockLanded,
+  safeBlockField,
   parseBlock,
   readBlockField,
   type OpResult,
@@ -9,7 +10,7 @@ import {
   type SyncOp,
 } from '../../core/sync';
 import { send } from '../bridge';
-import { SyncError, siteRequest } from './http';
+import { SyncError, siteRequest, wait } from './http';
 import type { MemorySyncAdapter } from './types';
 
 /**
@@ -186,22 +187,29 @@ export const chatgptSync: MemorySyncAdapter = {
     try {
       // Re-read right before writing so nothing typed meanwhile is lost.
       const fields = await readFields();
-      const { outside } = parseBlock(fields.other_user_message ?? '');
+      const current = fields.other_user_message ?? '';
+      const { outside } = parseBlock(current);
       const lines = op.lines.map((line) => line.text);
-      let next = composeBlockField(outside, lines);
-      while (next.length > BLOCK_FIELD_LIMIT && lines.length > 0) {
+      let next = safeBlockField(current, lines);
+      while (next !== null && next.length > BLOCK_FIELD_LIMIT && lines.length > 0) {
         lines.pop();
-        next = composeBlockField(outside, lines);
+        next = safeBlockField(current, lines);
       }
+      if (next === null) return { ok: false, error: 'Stopped: writing would have changed your own text in ChatGPT’s custom instructions.' };
       if (next !== (fields.other_user_message ?? '')) {
         await api('/backend-api/user_system_messages', {
           method: 'PATCH',
           body: JSON.stringify({ other_user_message: next }),
         });
       }
-      // Check it really landed.
-      const saved = parseBlock((await readFields()).other_user_message ?? '').lines;
-      const landed = saved.length === lines.length && saved.every((line, index) => line === lines[index]);
+      // Check it really landed. The site can take a moment to show a
+      // change it accepted, so look a few times before calling it a failure
+      // (that used to make a sync need a second try).
+      let landed = false;
+      for (let look = 0; look < 4 && !landed; look += 1) {
+        if (look > 0) await wait(700);
+        landed = blockLanded((await readFields()).other_user_message ?? '', outside, lines);
+      }
       if (!landed) return { ok: false, error: 'ChatGPT didn’t keep the change. Try again from the dashboard.' };
       if (lines.length < op.lines.length) {
         return { ok: false, error: 'Some memories didn’t fit in ChatGPT’s custom instructions.' };

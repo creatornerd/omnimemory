@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, HardDrive, PauseCircle, Plus, RefreshCw, ShieldCheck, Sparkles, Undo2 } from 'lucide-react';
-import { SITE_IDS, SYNC_MODES, SYNC_TARGETS, type SiteId } from '../core';
+import { SHARED_DAILY_LIMIT, SITE_IDS, SYNC_MODES, SYNC_TARGETS, type SiteId } from '../core';
+import { HAS_SHARED_KEY } from '../shared/platform';
 import { SITES } from '../shared/sites';
 import { Dialog } from '../ui/components/Dialog';
 import { Button, Toggle } from '../ui/components/primitives';
@@ -8,7 +9,7 @@ import { useToast } from '../ui/components/Toast';
 import { cx } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
 import { requestSync } from './sync-actions';
-import { HubDemo, SavingDemos, SharingDemo, SyncDemo } from './tour-demos';
+import { AssistantDemo, HubDemo, SavingDemos, SharingDemo, SyncDemo } from './tour-demos';
 
 function Point({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -40,6 +41,20 @@ function SyncChoices({ store }: { store: Store }) {
 
   const allOn = sites.every((site) => settings.siteSync[site]);
 
+  /** One settings change for every chatbot, then a check on each. */
+  async function turnOnAll() {
+    const off = sites.filter((site) => !settings.siteSync[site]);
+    if (off.length === 0) return;
+    await service.updateSettings({ siteSync: Object.fromEntries(off.map((site) => [site, true])) });
+    const results = await Promise.allSettled(off.map((site) => requestSync(site)));
+    const failed = results.find((result) => result.status === 'rejected');
+    toast(
+      failed
+        ? (failed.reason as Error).message
+        : `Checking ${off.map((site) => SITES[site].label).join(', ')}. Nothing is written until you OK it.`,
+    );
+  }
+
   return (
     <div>
       <ul className="divide-y divide-line rounded-lg border border-line">
@@ -64,14 +79,33 @@ function SyncChoices({ store }: { store: Store }) {
           variant="ghost"
           className="mt-2"
           icon={<RefreshCw size={12} />}
-          onClick={() => {
-            for (const site of sites) if (!settings.siteSync[site]) void set(site, true);
-          }}
+          onClick={() => void turnOnAll()}
         >
           Turn on for all
         </Button>
       )}
     </div>
+  );
+}
+
+/** Turn the AI on right from the tour, when a key is available. */
+function AiChoice({ store }: { store: Store }) {
+  const { service, settings } = store;
+  if (!HAS_SHARED_KEY) {
+    return (
+      <p className="mt-3 text-[11px] text-ink-3">Turn it on any time in Settings → AI assistant with your Gemini key.</p>
+    );
+  }
+  return (
+    <label className="mt-3 flex items-center gap-3 rounded-lg border border-line px-3 py-2.5">
+      <Sparkles size={14} />
+      <span className="flex-1 text-[13px] font-medium">Use the AI assistant</span>
+      <Toggle
+        label="Use the AI assistant"
+        checked={settings.aiEnabled}
+        onChange={(aiEnabled) => void service.updateSettings({ aiEnabled })}
+      />
+    </label>
   );
 }
 
@@ -89,6 +123,17 @@ const STEPS: Step[] = [
         <p className="text-[13px] leading-relaxed text-ink-2">
           Tell OmniMemory something once — your job, how you like answers, what you’re working on — and ChatGPT,
           Claude and Gemini can all use it. No more repeating yourself every time you switch.
+        </p>
+        <p className="mt-3 text-[12px] leading-relaxed text-ink-3">
+          By using OmniMemory you agree to its{' '}
+          <a href="https://omnimemory.vercel.app/terms" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-ink">
+            Terms of Use
+          </a>{' '}
+          and{' '}
+          <a href="https://omnimemory.vercel.app/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-ink">
+            Privacy Policy
+          </a>
+          .
         </p>
       </>
     ),
@@ -114,6 +159,31 @@ const STEPS: Step[] = [
             “Sharing on” at the bottom of the sidebar stops every chatbot getting anything until you turn it back on.
           </Point>
         </ul>
+      </>
+    ),
+  },
+  {
+    title: 'Let AI keep it tidy',
+    body: (store) => (
+      <>
+        <AssistantDemo />
+        <p className="mt-2.5 text-xs leading-relaxed text-ink-2">
+          Ask the Assistant in plain words — “remove the repeats”, “I moved to Austin”, “what do you know about me?” — and
+          it suggests the changes. Nothing changes until you press Apply, and Undo puts everything back.
+        </p>
+        <ul className="mt-3 space-y-2.5">
+          <Point icon={<Sparkles size={14} />} title="Catches repeats and pulls in what matters">
+            Warns before you save something you already have, tidies what your chatbots remember into one clean list,
+            and the ✦ button on a chat suggests memories from it.
+          </Point>
+          <Point icon={<ShieldCheck size={14} />} title="Only what you’d expect">
+            The AI never sees private memories, ones not shared with any chatbot, or ones you’ve switched off for AI.{' '}
+            {HAS_SHARED_KEY
+              ? `${SHARED_DAILY_LIMIT} free AI actions a day, or add your own Gemini key for unlimited use.`
+              : 'It uses your own Gemini key.'}
+          </Point>
+        </ul>
+        <AiChoice store={store} />
       </>
     ),
   },
@@ -185,12 +255,17 @@ export function Welcome({
   onClose: () => void;
   onAddMemory: () => void;
 }) {
-  const [index, setIndex] = useState(0);
+  const [index, setIndexState] = useState(0);
+  const [direction, setDirection] = useState<'next' | 'back'>('next');
+  const setIndex = (next: number) => {
+    setDirection(next >= index ? 'next' : 'back');
+    setIndexState(next);
+  };
   const step = STEPS[index];
   const last = index === STEPS.length - 1;
 
   function close() {
-    setIndex(0);
+    setIndexState(0);
     onClose();
   }
 
@@ -241,7 +316,7 @@ export function Welcome({
         </>
       }
     >
-      <div key={index} className="animate-rise min-h-[400px]">
+      <div key={index} className={cx('min-h-[420px]', direction === 'next' ? 'animate-slide-next' : 'animate-slide-back')}>
         <h3 className="mb-3 text-base font-semibold">{step.title}</h3>
         {step.body(store)}
       </div>

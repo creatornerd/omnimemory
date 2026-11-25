@@ -1,6 +1,7 @@
 import {
   BLOCK_LIMITS,
-  composeBlockField,
+  blockLanded,
+  safeBlockField,
   parseBlock,
   readBlockField,
   type OpResult,
@@ -8,7 +9,7 @@ import {
   type RemoteSnapshot,
   type SyncOp,
 } from '../../core/sync';
-import { SyncError, siteRequest } from './http';
+import { SyncError, siteRequest, wait } from './http';
 import type { MemorySyncAdapter } from './types';
 
 /**
@@ -209,15 +210,21 @@ export const claudeSync: MemorySyncAdapter = {
       const current = await readField();
       const { outside } = parseBlock(current);
       const lines = op.lines.map((line) => line.text);
-      let next = composeBlockField(outside, lines);
-      while (next.length > FIELD_LIMIT && lines.length > 0) {
+      let next = safeBlockField(current, lines);
+      while (next !== null && next.length > FIELD_LIMIT && lines.length > 0) {
         lines.pop();
-        next = composeBlockField(outside, lines);
+        next = safeBlockField(current, lines);
       }
+      if (next === null) return { ok: false, error: 'Stopped: writing would have changed your own text in Claude’s instructions.' };
       if (next !== current) await writeField(next);
-      // Check it really landed.
-      const saved = parseBlock(await readField()).lines;
-      const landed = saved.length === lines.length && saved.every((line, index) => line === lines[index]);
+      // Check it really landed. The site can take a moment to show a
+      // change it accepted, so look a few times before calling it a failure
+      // (that used to make a sync need a second try).
+      let landed = false;
+      for (let look = 0; look < 4 && !landed; look += 1) {
+        if (look > 0) await wait(700);
+        landed = blockLanded(await readField(), outside, lines);
+      }
       if (!landed) return { ok: false, error: 'Claude didn’t keep the change. Try again from the dashboard.' };
       if (lines.length < op.lines.length) {
         return { ok: false, error: 'Some memories didn’t fit in Claude’s instructions.' };

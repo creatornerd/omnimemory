@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  chatRequest,
+  parseChat,
   MemoryAssistant,
   aiCanRead,
   buildExport,
@@ -229,5 +231,31 @@ describe('AI assistant: chat', () => {
     const answer = await assistant.chat([{ role: 'user', text: 'Hi' }], []);
     expect(models).toEqual(['gemini-3.5-flash', 'gemini-3.5-flash-lite']);
     expect(answer.fellBack).toBe(true);
+  });
+});
+
+describe('assistant chat rules', () => {
+  it('tells the model to stay on OmniMemory and to split a replace into add + delete', () => {
+    const request = chatRequest([{ role: 'user', text: 'replace my city with Austin' }], []);
+    const rules = request.systemInstruction?.parts.map((part) => part.text).join(' ') ?? '';
+    expect(rules).toMatch(/only help with OmniMemory/);
+    expect(rules).toMatch(/REPLACE/);
+    expect(rules).toMatch(/several things/);
+  });
+
+  it('keeps an add and a delete from one reply, so a swap can be approved part by part', async () => {
+    const h = createHarness();
+    const old = await h.service.create({ content: 'I live in Ohio' });
+    const answer = parseChat(
+      {
+        reply: 'I’ll add Austin and remove Ohio.',
+        changes: [
+          { action: 'add', index: -1, text: 'I live in Austin', category: 'Personal' },
+          { action: 'delete', index: 0, text: '' },
+        ],
+      },
+      [old],
+    );
+    expect(answer.changes.map((change) => change.kind)).toEqual(['add', 'delete']);
   });
 });

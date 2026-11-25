@@ -8,13 +8,17 @@ import {
   MAX_TAGS,
   SITE_IDS,
   TRASH_RETENTION_DAYS,
+  DEFAULT_SITE_COLORS,
+  isHexColor,
   isCategory,
+  isSiteId,
   type HistoryEntry,
   type Memory,
   type MemoryDraft,
   type MemoryPatch,
   type Settings,
   type SettingsPatch,
+  type SiteId,
   type SitePermissions,
 } from './types';
 
@@ -60,11 +64,43 @@ export function cleanTags(tags: unknown): string[] {
   return [...seen];
 }
 
+/** Chatbot colours: valid hex colours win, null resets to the default, anything else is ignored. */
+function mergeColors(
+  base: Record<SiteId, string>,
+  patch?: Partial<Record<SiteId, string | null>> | null,
+): Record<SiteId, string> {
+  const next = { ...base };
+  if (!patch || typeof patch !== 'object') return next;
+  for (const site of SITE_IDS) {
+    const value = patch[site];
+    if (value === null) next[site] = DEFAULT_SITE_COLORS[site];
+    else if (isHexColor(value)) next[site] = value.toLowerCase();
+  }
+  return next;
+}
+
 function mergePermissions(base: SitePermissions, patch?: Partial<SitePermissions>): SitePermissions {
   const next = { ...base };
   if (!patch) return next;
   for (const site of SITE_IDS) {
     if (typeof patch[site] === 'boolean') next[site] = patch[site];
+  }
+  return next;
+}
+
+/** Per-chatbot sharing defaults: null drops a chatbot's own rule, anything malformed is ignored. */
+function mergeSourceDefaults(
+  base: Partial<Record<SiteId, SitePermissions>>,
+  fallback: SitePermissions,
+  patch?: Partial<Record<SiteId, Partial<SitePermissions> | null>> | null,
+): Partial<Record<SiteId, SitePermissions>> {
+  const next: Partial<Record<SiteId, SitePermissions>> = {};
+  for (const site of SITE_IDS) if (base?.[site]) next[site] = mergePermissions(fallback, base[site]);
+  if (!patch || typeof patch !== 'object') return next;
+  for (const site of SITE_IDS) {
+    const value = patch[site];
+    if (value === null) delete next[site];
+    else if (value && typeof value === 'object') next[site] = mergePermissions(next[site] ?? fallback, value);
   }
   return next;
 }
@@ -82,6 +118,8 @@ export class MemoryService {
   private readonly now: () => Date;
   private readonly newId: () => string;
   private readonly onChange: () => void;
+  /** Settings changes run one after another, so quick changes can't overwrite each other. */
+  private settingsQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly backend: StorageBackend,
@@ -130,7 +168,32 @@ export class MemoryService {
       sitePaused: { ...DEFAULT_SETTINGS.sitePaused, ...stored?.sitePaused },
       defaultPermissions: { ...DEFAULT_SETTINGS.defaultPermissions, ...stored?.defaultPermissions },
       siteSync: { ...DEFAULT_SETTINGS.siteSync, ...stored?.siteSync },
+      siteColors: mergeColors(DEFAULT_SETTINGS.siteColors, stored?.siteColors),
+      sourceDefaults: mergeSourceDefaults(
+        stored?.sourceDefaults ?? {},
+        { ...DEFAULT_SETTINGS.defaultPermissions, ...stored?.defaultPermissions },
+      ),
     };
+  }
+
+  /** AI actions used today with OmniMemory's shared key (see shared/platform.ts). */
+  async getAiUsage(): Promise<{ day: string; count: number }> {
+    const today = localDay(this.now());
+    try {
+      const stored = JSON.parse((await this.backend.getSecret('ai-usage')) ?? '{}') as { day?: unknown; count?: unknown };
+      if (stored.day === today && typeof stored.count === 'number') return { day: today, count: stored.count };
+    } catch {
+      // unreadable: start the day fresh
+    }
+    return { day: today, count: 0 };
+  }
+
+  async recordAiUse(): Promise<number> {
+    const usage = await this.getAiUsage();
+    const count = usage.count + 1;
+    await this.backend.putSecret('ai-usage', JSON.stringify({ day: usage.day, count }));
+    this.onChange();
+    return count;
   }
 
   /** The user's Gemini API key, if they added one (see core/ai.ts). */
@@ -145,7 +208,13 @@ export class MemoryService {
     this.onChange();
   }
 
-  async updateSettings(patch: SettingsPatch): Promise<Settings> {
+  updateSettings(patch: SettingsPatch): Promise<Settings> {
+    const run = this.settingsQueue.then(() => this.applySettings(patch));
+    this.settingsQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async applySettings(patch: SettingsPatch): Promise<Settings> {
     const current = await this.getSettings();
     const next: Settings = {
       ...current,
@@ -153,6 +222,8 @@ export class MemoryService {
       sitePaused: mergePermissions(current.sitePaused, patch.sitePaused),
       defaultPermissions: mergePermissions(current.defaultPermissions, patch.defaultPermissions),
       siteSync: mergePermissions(current.siteSync, patch.siteSync),
+      siteColors: mergeColors(current.siteColors, patch.siteColors),
+      sourceDefaults: mergeSourceDefaults(current.sourceDefaults, current.defaultPermissions, patch.sourceDefaults),
     };
     await this.backend.putSettings(next);
     this.onChange();
@@ -182,7 +253,11 @@ export class MemoryService {
       created_at: at,
       updated_at: at,
       enabled: draft.enabled ?? true,
-      permissions: mergePermissions(settings.defaultPermissions, draft.permissions),
+      permissions: mergePermissions(
+        (isSiteId(draft.source) && settings.sourceDefaults[draft.source]) || settings.defaultPermissions,
+        draft.permissions,
+      ),
+      ...(draft.aiAllowed === false ? { aiAllowed: false } : {}),
       status: 'active',
       history: [{ at, action }],
     };
@@ -239,11 +314,13 @@ export class MemoryService {
       }
     }
     if (typeof patch.enabled === 'boolean') next.enabled = patch.enabled;
+    if (typeof patch.aiAllowed === 'boolean') next.aiAllowed = patch.aiAllowed;
     next.permissions = mergePermissions(current.permissions, patch.permissions);
 
     const textChanged = Object.keys(previous).length > 0;
     const sharingChanged =
       next.enabled !== current.enabled ||
+      (next.aiAllowed !== false) !== (current.aiAllowed !== false) ||
       SITE_IDS.some((site) => next.permissions[site] !== current.permissions[site]);
     if (!textChanged && !sharingChanged) return current;
 
@@ -404,6 +481,8 @@ export class MemoryService {
       tags: cleanTags(memories.flatMap((memory) => memory.tags)),
       enabled: memories.every((memory) => memory.enabled),
       permissions,
+      // Merging never widens who can read a fact, the AI included.
+      ...(memories.some((memory) => memory.aiAllowed === false) ? { aiAllowed: false } : {}),
       updated_at: at,
       history: this.withHistory(survivor, {
         at,
@@ -424,4 +503,10 @@ export class MemoryService {
     this.onChange();
     return merged;
   }
+}
+
+/** "2026-11-16" in the user's own time zone, so the daily allowance resets at their midnight. */
+function localDay(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }

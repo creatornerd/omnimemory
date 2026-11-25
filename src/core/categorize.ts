@@ -12,8 +12,9 @@ const KEYWORDS: Record<Exclude<Category, 'Other'>, string[]> = {
     'university', 'degree', 'gpa', 'semester', 'math', 'physics', 'chemistry', 'biology', 'essay', 'ap',
   ],
   Projects: [
-    'project', 'build', 'robot', 'robotics', 'vex', 'team', 'competition', 'startup', 'app', 'prototype',
-    'launch', 'deadline', 'client', 'roadmap', 'mvp', 'hackathon',
+    'project', 'projects', 'building', 'robot', 'robotics', 'vex', 'competition', 'startup', 'app', 'prototype',
+    'launch', 'deadline', 'client', 'roadmap', 'mvp', 'hackathon', 'side project', 'portfolio', 'business',
+    'website', 'novel', 'thesis', 'research', 'product',
   ],
   Technology: [
     'code', 'program', 'python', 'javascript', 'typescript', 'react', 'rust', 'java', 'c++', 'linux',
@@ -21,12 +22,19 @@ const KEYWORDS: Record<Exclude<Category, 'Other'>, string[]> = {
     'server', 'docker',
   ],
   Preferences: [
-    'prefer', 'like', 'dislike', 'favorite', 'favourite', 'always', 'never', 'style', 'tone', 'format',
-    'concise', 'detailed', 'avoid', 'want', 'hate', 'love',
+    'prefer', 'dislike', 'favorite', 'favourite', 'always', 'never', 'style', 'tone', 'format',
+    'concise', 'detailed', 'avoid', 'want', 'hate', 'answer', 'answers', 'reply', 'replies', 'response',
+    'responses', 'short', 'brief', 'direct', 'bullet', 'bullets', 'explain', 'explanations', 'emoji', 'metric',
+    'units', 'formal', 'casual',
   ],
   Personal: [
     'name', 'live', 'born', 'age', 'family', 'brother', 'sister', 'mother', 'father', 'wife', 'husband',
-    'partner', 'dog', 'cat', 'birthday', 'hobby', 'allergic', 'vegetarian', 'vegan', 'city', 'hometown',
+    'partner', 'dog', 'cat', 'pet', 'birthday', 'hobby', 'hobbies', 'allergic', 'allergy', 'vegetarian', 'vegan',
+    'city', 'hometown', 'kids', 'son', 'daughter', 'children', 'married', 'job', 'work', 'career', 'nurse',
+    'doctor', 'lawyer', 'engineer', 'coach', 'coaching', 'photography', 'photographer', 'photos', 'wildlife',
+    'camera', 'hiking', 'hike', 'travel', 'garden', 'gardening', 'cook', 'cooking', 'bake', 'baking', 'piano',
+    'guitar', 'music', 'sing', 'soccer', 'basketball', 'tennis', 'running', 'marathon', 'gym', 'fitness', 'yoga',
+    'volunteer', 'painting', 'draw', 'drawing', 'reading', 'books', 'diet', 'religion', 'health',
   ],
 };
 
@@ -40,6 +48,7 @@ export function suggestCategory(content: string): Category {
   let bestScore = 0;
   for (const [category, words] of STEMMED) {
     const score = tokens.reduce((count, token) => count + (words.has(token) ? 1 : 0), 0);
+    // Ties go to the earlier, more specific category in KEYWORDS.
     if (score > bestScore) {
       best = category;
       bestScore = score;

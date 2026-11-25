@@ -1,11 +1,14 @@
-import type { SiteId, Source } from '../core/types';
+import { DEFAULT_SITE_COLORS, type SiteId, type Source } from '../core/types';
 
 export interface SiteInfo {
   id: SiteId;
   label: string;
   /** Exact hostnames this site is served from. */
   hosts: string[];
-  /** Brand-adjacent dot colour used in sharing toggles. */
+  /**
+   * The chatbot's colour as a CSS value. It reads the user's choice from
+   * --om-site-<id> (set by applySiteColors) and falls back to the default.
+   */
   color: string;
 }
 
@@ -14,9 +17,9 @@ export interface SiteInfo {
  * one adapter in src/content/adapters, one match pattern in the manifest.
  */
 export const SITES: Record<SiteId, SiteInfo> = {
-  chatgpt: { id: 'chatgpt', label: 'ChatGPT', hosts: ['chatgpt.com'], color: '#10a37f' },
-  claude: { id: 'claude', label: 'Claude', hosts: ['claude.ai'], color: '#d97757' },
-  gemini: { id: 'gemini', label: 'Gemini', hosts: ['gemini.google.com'], color: '#4c8df6' },
+  chatgpt: { id: 'chatgpt', label: 'ChatGPT', hosts: ['chatgpt.com'], color: `var(--om-site-chatgpt, ${DEFAULT_SITE_COLORS.chatgpt})` },
+  claude: { id: 'claude', label: 'Claude', hosts: ['claude.ai'], color: `var(--om-site-claude, ${DEFAULT_SITE_COLORS.claude})` },
+  gemini: { id: 'gemini', label: 'Gemini', hosts: ['gemini.google.com'], color: `var(--om-site-gemini, ${DEFAULT_SITE_COLORS.gemini})` },
 };
 
 export const SITE_LIST: SiteInfo[] = Object.values(SITES);

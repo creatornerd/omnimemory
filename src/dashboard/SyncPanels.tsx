@@ -6,13 +6,14 @@ import { SITES } from '../shared/sites';
 import { Badge, Button } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { cx, plural, timeAgo } from '../ui/format';
+import { Help } from './help';
 
 const PREVIEW_ICON = { add: Plus, update: Pencil, remove: Minus } as const;
 const PREVIEW_WORD = { add: 'Add', update: 'Update', remove: 'Remove' } as const;
 
 function Quote({ children }: { children: string }) {
   return (
-    <p className="mt-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] leading-relaxed whitespace-pre-wrap text-ink">
+    <p className="mt-1 text-[13.5px] leading-relaxed whitespace-pre-wrap text-ink">
       {children}
     </p>
   );
@@ -66,11 +67,13 @@ export function Approvals({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-warn/40 bg-warn-soft/60 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <ShieldCheck size={14} className="text-warn" />
-        <h3 className="text-[13px] font-semibold">Waiting for your OK</h3>
-        <span className="text-xs text-ink-3">{held.length}</span>
+    <div className="mt-4 overflow-hidden rounded-xl border border-[color-mix(in_srgb,var(--om-warn)_28%,transparent)]">
+      <div className="flex flex-wrap items-center gap-2 bg-warn-soft py-2.5 pr-2.5 pl-3.5 text-warn">
+        <ShieldCheck size={15} />
+        <h3 className="flex items-center gap-1.5 text-[13px] font-semibold">
+          {held.length === 1 ? '1 change' : `${held.length} changes`} waiting for your OK
+          <Help id="chatbots.approvals" />
+        </h3>
         {held.length > 1 && (
           <Button
             size="sm"
@@ -85,20 +88,20 @@ export function Approvals({
         )}
       </div>
       {held.length > 1 && (
-        <p className="mt-1 text-xs leading-relaxed text-ink-3">
+        <p className="border-t border-line px-3.5 pt-2.5 text-xs leading-relaxed text-ink-3">
           Look through them below if you’d like to decide one by one.
         </p>
       )}
-      <ul className="mt-2 space-y-3">
+      <ul className="divide-y divide-line">
         {held.map((change) => (
-          <li key={change.key} className="rounded-md bg-surface/70 p-2.5">
+          <li key={change.key} className="p-3.5">
             {change.kind === 'first-write' && (
               <>
-                <p className="text-[13px] font-medium">Check before OmniMemory writes to {label} for the first time</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-ink-3">
+                <p className="text-[13.5px] font-semibold">Check before OmniMemory writes to {label} for the first time</p>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
                   Nothing has been changed on {label} yet. This is what turning on sync would do:
                 </p>
-                <ul className="mt-2 divide-y divide-line rounded-md border border-line bg-surface">
+                <ul className="mt-2 divide-y divide-line rounded-lg border border-line bg-surface">
                   {(change.preview ?? []).map((row, index) => {
                     const Icon = PREVIEW_ICON[row.action];
                     return (
@@ -126,9 +129,9 @@ export function Approvals({
 
             {change.kind === 'adopt' && (
               <>
-                <p className="text-[13px] font-medium">{label} already has this</p>
+                <p className="text-[13.5px] font-semibold">{label} already has this</p>
                 <Quote>{change.remoteText ?? ''}</Quote>
-                <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
+                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
                   It says the same as your memory, so OmniMemory didn’t add a second copy. Link them and OmniMemory
                   keeps {label}’s entry up to date when you edit the memory. It will still ask before removing it.
                 </p>
@@ -145,17 +148,22 @@ export function Approvals({
 
             {change.kind === 'delete' && (
               <>
-                <p className="text-[13px] font-medium">Remove this from {label}?</p>
+                <p className="text-[13.5px] font-semibold">
+                  {change.repeat ? `${label} has this twice. Remove the extra copy?` : `Remove this from ${label}?`}
+                </p>
                 <Quote>{change.remoteText ?? ''}</Quote>
-                <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
-                  The memory it’s linked to was deleted or is no longer shared with {label}
-                  {change.legacy
-                    ? ', but it was linked by an earlier version of OmniMemory that didn’t record who added it.'
-                    : `, but ${label} had this before it was linked to OmniMemory.`}
+                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+                  {change.repeat
+                    ? `One copy stays on ${label} and stays in step with your memory. Only the repeat is removed.`
+                    : `The memory it’s linked to was deleted or is no longer shared with ${label}${
+                        change.legacy
+                          ? ', but it was linked by an earlier version of OmniMemory that didn’t record who added it.'
+                          : `, but ${label} had this before it was linked to OmniMemory.`
+                      }`}
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   <Button size="sm" variant="dangerOutline" disabled={busy} onClick={() => void answer(change.key, true)}>
-                    Remove from {label}
+                    {change.repeat ? 'Remove the copy' : `Remove from ${label}`}
                   </Button>
                   <Button size="sm" disabled={busy} onClick={() => void answer(change.key, false)}>
                     Keep it on {label}
@@ -201,12 +209,12 @@ export function ActivityFeed({ site, activity }: { site: SiteId; activity: Activ
 
   return (
     <div>
-      <ul className="divide-y divide-line rounded-lg border border-line">
+      <ul className="divide-y divide-line overflow-hidden rounded-[10px] border border-line">
         {rows.map((entry) => {
           const info = ACTIVITY[entry.kind];
           const Icon = info.icon;
           return (
-            <li key={entry.id} className={cx('flex items-start gap-2.5 px-3 py-2', entry.undoneAt && 'opacity-55')}>
+            <li key={entry.id} className={cx('flex items-start gap-2.5 px-3 py-2.5', entry.undoneAt && 'opacity-55')}>
               <Icon size={13} className="mt-1 shrink-0 text-ink-3" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-ink-3">

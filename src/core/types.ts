@@ -56,6 +56,11 @@ export interface Memory {
   /** Master switch. false = "keep private": never shared, per-site choices kept. */
   enabled: boolean;
   permissions: SitePermissions;
+  /**
+   * May the optional AI assistant read this memory? Missing = yes. The AI
+   * also never reads private memories or ones not shared with any chatbot.
+   */
+  aiAllowed?: boolean;
   status: MemoryStatus;
   /** Set while status === 'deleted'; drives the 30-day restore window. */
   deleted_at?: string;
@@ -66,6 +71,18 @@ export interface Memory {
 
 export type ThemeSetting = 'system' | 'light' | 'dark';
 
+/** Each chatbot's colour in OmniMemory (dots, bars, badges). Users can change them. */
+export const DEFAULT_SITE_COLORS: Record<SiteId, string> = {
+  chatgpt: '#3e9a7a',
+  claude: '#c4774f',
+  gemini: '#8a70cc',
+};
+
+/** A colour OmniMemory accepts: six-digit hex, like "#3e9a7a". */
+export function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+}
+
 export interface Settings {
   /** Global kill switch: nothing is returned to any chatbot while true. */
   sharingPaused: boolean;
@@ -73,9 +90,17 @@ export interface Settings {
   sitePaused: SitePermissions;
   /** Sharing defaults applied to newly created memories. */
   defaultPermissions: SitePermissions;
+  /**
+   * Sharing for memories saved while on (or brought in from) a chatbot, so
+   * that, say, things saved on ChatGPT can stay off Claude. A chatbot with no
+   * entry follows defaultPermissions.
+   */
+  sourceDefaults: Partial<Record<SiteId, SitePermissions>>;
   /** Use the visible conversation tail to rank relevance (never stored). */
   relevanceFromPage: boolean;
   theme: ThemeSetting;
+  /** The colour used for each chatbot everywhere in OmniMemory. */
+  siteColors: Record<SiteId, string>;
   libraryView: 'compact' | 'detailed';
   /**
    * Keep each chatbot's own memory feature in step with OmniMemory
@@ -92,7 +117,13 @@ export interface Settings {
 }
 
 /** A settings change. Per-chatbot switches can be changed one at a time. */
-export type SettingsPatch = Partial<Omit<Settings, 'sitePaused' | 'defaultPermissions' | 'siteSync'>> & {
+export type SettingsPatch = Partial<
+  Omit<Settings, 'sitePaused' | 'defaultPermissions' | 'siteSync' | 'siteColors' | 'sourceDefaults'>
+> & {
+  /** null makes that chatbot follow the general default again. */
+  sourceDefaults?: Partial<Record<SiteId, Partial<SitePermissions> | null>>;
+  /** null puts that chatbot back to its default colour. */
+  siteColors?: Partial<Record<SiteId, string | null>>;
   sitePaused?: Partial<SitePermissions>;
   defaultPermissions?: Partial<SitePermissions>;
   siteSync?: Partial<SitePermissions>;
@@ -102,8 +133,10 @@ export const DEFAULT_SETTINGS: Settings = {
   sharingPaused: false,
   sitePaused: { chatgpt: false, claude: false, gemini: false },
   defaultPermissions: { chatgpt: true, claude: true, gemini: true },
+  sourceDefaults: {},
   relevanceFromPage: true,
   theme: 'system',
+  siteColors: { ...DEFAULT_SITE_COLORS },
   libraryView: 'detailed',
   // Off until the user turns it on for a chatbot (and OKs the first write).
   siteSync: { chatgpt: false, claude: false, gemini: false },
@@ -119,6 +152,7 @@ export interface MemoryDraft {
   source?: Source;
   enabled?: boolean;
   permissions?: Partial<SitePermissions>;
+  aiAllowed?: boolean;
 }
 
 /** Fields a caller may change on an existing memory. */
@@ -128,6 +162,7 @@ export interface MemoryPatch {
   tags?: string[];
   enabled?: boolean;
   permissions?: Partial<SitePermissions>;
+  aiAllowed?: boolean;
 }
 
 export const TRASH_RETENTION_DAYS = 30;

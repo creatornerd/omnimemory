@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OmniMemory — One memory for ChatGPT, Claude and Gemini</title>
+    <meta
+      name="description"
+      content="OmniMemory is a browser extension that keeps one memory you control for ChatGPT, Claude and Gemini. Save it once, add it to any chat in one click, and keep it on your own device."
+    />
+    <meta property="og:title" content="OmniMemory — One memory for ChatGPT, Claude and Gemini" />
+    <meta
+      property="og:description"
+      content="Save what you want your AI to know once. Add it to any chat in one click, choose which chatbot sees what, and keep all of it on your own device."
+    />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <script>
+      try {
+        var t = localStorage.getItem('om-theme');
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></symbol>
+      <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0" /><circle cx="12" cy="12" r="3" /></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></symbol>
+      <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" /></symbol>
+      <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z" /><path d="M20 3v4" /><path d="M22 5h-4" /></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z" /><path d="m21.85 2.15-10.94 10.94" /></symbol>
+      <symbol id="i-drive" viewBox="0 0 24 24"><line x1="22" x2="2" y1="12" y2="12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><line x1="6" x2="6.01" y1="16" y2="16" /><line x1="10" x2="10.01" y1="16" y2="16" /></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></symbol>
+    </svg>
+
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="/">
+          <img class="logo-mark" src="/logo.svg" width="26" height="26" alt="" />
+          OmniMemory
+        </a>
+        <nav class="site-nav" aria-label="Main">
+          <a href="#how-it-works">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#faq">FAQ</a>
+          <a href="/about">About</a>
+        </nav>
+        <button class="theme-btn" type="button" aria-label="Switch between light and dark mode" title="Light / dark mode" onclick="var r=document.documentElement,t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem('om-theme',t)}catch(e){}">
+          <svg class="icon moon" viewBox="0 0 24 24" style="width: 17px; height: 17px"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
+          <svg class="icon sun" viewBox="0 0 24 24" style="width: 17px; height: 17px"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
+        </button>
+        <a class="btn btn-dark btn-sm" href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="wrap hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">One memory for ChatGPT, Claude and Gemini.</h1>
+          <p class="lead">
+            Save what you want your AI to know once. Add it to any chat in one click, choose which chatbot sees what, and
+            keep all of it on your own device.
+          </p>
+          <div class="cta-row">
+            <span class="btn btn-soon" aria-disabled="true">Chrome Web Store <span class="soon-tag">Coming soon</span></span>
+            <a class="btn btn-light" href="#how-it-works">See how it works</a>
+          </div>
+          <p class="fine">No account. Works in Chrome, Edge and Brave. Firefox version coming soon.</p>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <div class="mock-chat">
+            <div class="bubble">What can I make with a can of chickpeas?</div>
+            <div class="reply">A quick chickpea curry, or roast them with lemon and paprika for a snack.</div>
+            <div class="tray" data-anim="hero">
+              <div class="tray-head"><img class="logo-mark" src="/logo.svg" width="16" height="16" alt="" />Suggested for this chat</div>
+              <div class="tray-list">
+                <div class="tray-item on"><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I’m vegetarian.</div>
+                <div class="tray-item on"><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I cook for a family of four.</div>
+                <div class="tray-item"><span class="tick"></span><span style="color: var(--body-strong)">I prefer short answers.</span></div>
+              </div>
+              <div class="tray-foot"><span data-count>2 selected</span><span class="mini-btn" data-btn>Add 2 to message</span></div>
+            </div>
+            <div class="composer">
+              <span>Plan a week of easy dinners for us.</span>
+              <span class="send"><svg class="icon" style="width: 14px; height: 14px"><use href="#i-arrow-up" /></svg></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="strip">
+        <div class="wrap">
+          <span>Works where you already chat</span>
+          <span class="site-chip"><span class="dot" style="background: var(--chatgpt)"></span>ChatGPT</span>
+          <span class="site-chip"><span class="dot" style="background: var(--claude)"></span>Claude</span>
+          <span class="site-chip"><span class="dot" style="background: var(--gemini)"></span>Gemini</span>
+        </div>
+      </div>
+
+      <section id="how-it-works" class="wrap section" aria-labelledby="how-title">
+        <h2 id="how-title" class="h2">Write it down once. Use it everywhere.</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-art" aria-hidden="true" data-anim="save">
+              <div class="card-mini" style="padding: 12px">
+                <div class="type-box" data-type>I program VEX V5 robots using PROS and LemLib.</div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 8px"><span class="mini-btn" data-btn style="height: 26px; padding: 0 11px; font-size: 11.5px">Save memory</span></div>
+              </div>
+            </div>
+            <div>
+              <h3>1. Save it</h3>
+              <p class="body">From the toolbar, by highlighting text on any page, or right from the chat. Each memory is one short fact.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-art" aria-hidden="true" data-anim="add">
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px; width: 100%; max-width: 260px">
+                <span class="pill" data-pill><img class="logo-mark" src="/logo.svg" width="16" height="16" alt="" />Memory<span class="count">2</span></span>
+                <div class="card-mini" style="border-radius: 16px; padding: 10px 14px; color: var(--ink-2); box-shadow: none">
+                  <div class="ctx" data-ctx>
+                    <div>
+                      <div class="ctx-line">I’m a nurse in Seattle.</div>
+                      <div class="ctx-line">I prefer short answers.</div>
+                    </div>
+                  </div>
+                  Help me write a cover letter
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>2. Add it to a chat</h3>
+              <p class="body">Click Memory above the message box. The ones that fit your chat are suggested first. Tick what you want, then read it before you send.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-art" aria-hidden="true">
+              <div class="card-mini" style="overflow: hidden" data-anim="sync">
+                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--chatgpt)"></span><span class="name">ChatGPT</span><span class="badge badge-ok">In sync</span></div>
+                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--claude)"></span><span class="name">Claude</span><span class="badge badge-ok">In sync</span></div>
+                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--gemini)"></span><span class="name">Gemini</span><span class="badge badge-warn">Waiting for your OK</span></div>
+              </div>
+            </div>
+            <div>
+              <h3>3. Keep chatbots in step</h3>
+              <p class="body">Turn on sync and each chatbot’s own memory stays up to date. You see a preview before anything changes.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="wrap section" style="padding-top: 72px; padding-bottom: 96px" aria-labelledby="features-title">
+        <h2 id="features-title" class="h2">You decide what each chatbot knows.</h2>
+        <div class="features">
+          <div class="feature">
+            <svg class="icon"><use href="#i-eye" /></svg>
+            <h3>Choose who sees what</h3>
+            <p>Share each memory with any chatbot, or keep it private. Pause one chatbot, or all of them at once.</p>
+          </div>
+          <div class="feature">
+            <svg class="icon"><use href="#i-inbox" /></svg>
+            <h3>See what chatbots already know</h3>
+            <p>OmniMemory finds things your chatbots remember that you haven’t saved yet. Keep the useful ones.</p>
+          </div>
+          <div class="feature">
+            <svg class="icon"><use href="#i-undo" /></svg>
+            <h3>Undo anything</h3>
+            <p>Each chatbot has an activity log with one-click undo. Deleted memories wait 30 days before they’re gone.</p>
+          </div>
+          <div class="feature">
+            <svg class="icon"><use href="#i-merge" /></svg>
+            <h3>Catches repeats and conflicts</h3>
+            <p>Saving “I use Python 3.13” when you already have “3.11”? You’ll see it before you save.</p>
+          </div>
+          <div class="feature">
+            <svg class="icon"><use href="#i-sparkles" /></svg>
+            <h3>An assistant, if you want one</h3>
+            <p>Turn it on for 10 free AI actions a day, or add your own Gemini key. Tidy up by asking: “I moved to Austin.” Nothing changes until you press Apply.</p>
+          </div>
+          <div class="feature">
+            <svg class="icon"><use href="#i-send" /></svg>
+            <h3>Never sends a message for you</h3>
+            <p>Memories go into the message box only when you press Add. If that doesn’t work, they’re copied for you to paste.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy" class="dark-band" aria-labelledby="privacy-title">
+        <div class="wrap">
+          <div class="intro">
+            <h2 id="privacy-title" class="h2">Your memories stay on your device.</h2>
+            <p>OmniMemory has no account and no server. Everything is stored in your browser, and you can export or delete it whenever you like.</p>
+          </div>
+          <div class="dark-grid">
+            <div>
+              <svg class="icon"><use href="#i-drive" /></svg>
+              <h3>No account, no analytics</h3>
+              <p>Nothing about you is sent to us. There is no “us” to send it to.</p>
+            </div>
+            <div>
+              <svg class="icon"><use href="#i-globe" /></svg>
+              <h3>Only talks to the chatbot you use</h3>
+              <p>Sync runs on the chatbot’s own site, with your normal sign-in. OmniMemory never sees your password.</p>
+            </div>
+            <div>
+              <svg class="icon"><use href="#i-lock" /></svg>
+              <h3>Private means private</h3>
+              <p>Private memories and anything that looks like a password are never shared, synced or sent to an AI.</p>
+            </div>
+            <div>
+              <svg class="icon"><use href="#i-shield" /></svg>
+              <h3>Chatbots only get what you share</h3>
+              <p>Chatbot pages can’t read your memories directly. They have to ask, and only get what you’ve shared with them.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap section" aria-labelledby="setup-title">
+        <h2 id="setup-title" class="h2">Ready in two minutes.</h2>
+        <div class="setup">
+          <div class="setup-card">
+            <span class="num">1</span>
+            <h3>Add OmniMemory to your browser</h3>
+            <p>Chrome Web Store listing coming soon. Until then, install it from <a href="https://github.com/creatornerd/omnimemory#install-it-in-chrome" target="_blank" rel="noopener">GitHub</a>.</p>
+          </div>
+          <div class="setup-card">
+            <span class="num">2</span>
+            <h3>Pin the icon</h3>
+            <p>From the puzzle-piece menu, so it’s always one click away.</p>
+          </div>
+          <div class="setup-card">
+            <span class="num">3</span>
+            <h3>Save your first memory</h3>
+            <p>A short tour shows you around the first time.</p>
+          </div>
+          <div class="setup-card">
+            <span class="num outline">4</span>
+            <h3>Turn on sync, if you like</h3>
+            <p>One switch per chatbot. Off until you choose.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap section" style="padding-top: 72px; padding-bottom: 96px" aria-labelledby="numbers-title">
+        <div class="numbers-head">
+          <h2 id="numbers-title" class="h2">It checks its own work.</h2>
+          <p>After every insert, OmniMemory reads the message box back to check the text landed. If it didn’t, the text is copied for you to paste instead. The code, including its automated tests, is open on <a href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">GitHub</a>.</p>
+        </div>
+        <div class="numbers">
+          <div><div class="big">0</div><p>OmniMemory servers. Your memories never leave your browser unless you share them.</p></div>
+          <div><div class="big">30<small>days</small></div><p>to restore anything you delete, with its sharing settings intact</p></div>
+          <div><div class="big">1<small>click</small></div><p>to undo any change sync made to a chatbot’s memory</p></div>
+        </div>
+      </section>
+
+      <section id="faq" class="faq" aria-labelledby="faq-title">
+        <div class="wrap">
+          <h2 id="faq-title" class="h2" style="margin-bottom: 32px">Questions</h2>
+          <details open>
+            <summary><span>Does OmniMemory ever send a message for me?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>No. Memories go into the message box only when you press Add to message, and you read it before you send. If they can’t be typed in, they’re copied so you can paste them.</p>
+          </details>
+          <details>
+            <summary><span>Where are my memories stored?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>In your browser, on this device. There’s no OmniMemory account or server. Memories don’t sync between devices, so export a copy from Settings if you want a backup.</p>
+          </details>
+          <details>
+            <summary><span>What does sync actually change?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>Only Instructions for Gemini, plus OmniMemory’s own marked section in ChatGPT’s custom instructions and in Claude’s Instructions. Everything else is read and never changed. Sync is off until you turn it on, and the first time you see a preview.</p>
+          </details>
+          <details>
+            <summary><span>Do I need the AI assistant?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>No. It’s off until you turn it on in Settings. Then you get 10 free AI actions a day, or unlimited use with your own Gemini API key. Without it, saving, adding memories to chats, sharing and sync all work the same.</p>
+          </details>
+          <details>
+            <summary><span>What happens if a chatbot changes its website?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>Adding memories to a message may stop working for that site until OmniMemory is updated. Copy still works, and everything else keeps running.</p>
+          </details>
+          <details>
+            <summary><span>Which browsers does it work in?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>Chrome 120 or newer, and Chromium browsers such as Edge and Brave. A Firefox version is being prepared for Firefox Add-ons; it will be listed there rather than on the Chrome Web Store.</p>
+          </details>
+          <details>
+            <summary><span>When will it be on the Chrome Web Store?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>Soon. Until then you can install it from the source on GitHub: build it, open chrome://extensions, turn on Developer mode and choose Load unpacked.</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="wrap" style="padding-bottom: 96px">
+        <div class="closing">
+          <img class="logo-mark" src="/logo.svg" width="48" height="48" alt="" />
+          <h2 class="h2">Give your AI a memory you control.</h2>
+          <div class="cta-row">
+            <span class="btn btn-soon" aria-disabled="true">Chrome Web Store <span class="soon-tag">Coming soon</span></span>
+            <a class="btn btn-dark" href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">View on GitHub</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <a class="brand" href="/"><img class="logo-mark" src="/logo.svg" width="18" height="18" alt="" />OmniMemory</a>
+        <nav aria-label="Footer">
+          <a href="/about">About</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+        <span class="copy">© 2026 Ahaan Hossain</span>
+      </div>
+    </footer>
+    <script src="/motion.js" defer></script>
+  </body>
+</html>

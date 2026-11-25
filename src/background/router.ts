@@ -9,9 +9,12 @@ import {
   searchMemories,
   shareableMemories,
   sharingBlock,
+  normalizeText,
   suggestCategory,
   type Memory,
+  type MemoryAssistant,
   type MemoryService,
+  type Settings,
   type SiteId,
 } from '../core';
 import type { SyncService } from '../core/sync-service';
@@ -24,6 +27,7 @@ import {
   type Response,
   type ReviewResult,
   type SharedMemory,
+  type SuggestResult,
 } from '../shared/messages';
 
 /**
@@ -44,6 +48,8 @@ export interface RouterDeps {
   sync?: SyncService;
   /** Told when a tab finishes a sync (so a background sync tab can close). */
   onSyncFinished?: (site: SiteId) => void;
+  /** The optional AI assistant (null when it's off). Its key never leaves the extension. */
+  assistant?: (settings: Settings) => MemoryAssistant | null;
 }
 
 function requireSync(deps: RouterDeps): SyncService {
@@ -53,6 +59,18 @@ function requireSync(deps: RouterDeps): SyncService {
 
 const MAX_RESULTS = 60;
 
+/** How long a hide or delete made from a chatbot page can be taken back from there. */
+const UNDO_MS = 5 * 60 * 1000;
+
+/** Hides and deletes made from chatbot pages, so that same page can undo them. */
+const recentRemovals = new Map<string, { site: SiteId; kind: 'unshare' | 'delete'; at: number }>();
+
+function noteRemoval(id: string, site: SiteId, kind: 'unshare' | 'delete'): void {
+  const now = Date.now();
+  for (const [key, entry] of recentRemovals) if (now - entry.at > UNDO_MS) recentRemovals.delete(key);
+  recentRemovals.set(id, { site, kind, at: now });
+}
+
 function toShared(memory: Memory): SharedMemory {
   return {
     id: memory.id,
@@ -60,6 +78,7 @@ function toShared(memory: Memory): SharedMemory {
     category: memory.category,
     tags: memory.tags,
     updated_at: memory.updated_at,
+    source: memory.source,
   };
 }
 
@@ -102,14 +121,35 @@ async function dispatch(request: Request, site: SiteId, deps: RouterDeps): Promi
 
       const result: QueryResult = {
         site,
+        color: settings.siteColors[site],
         blocked,
         total: shareable.length,
         items: ordered.slice(0, MAX_RESULTS).map((memory) => ({
           memory: toShared(memory),
           relevant: relevantIds.has(memory.id),
         })),
+        ai: !!deps.assistant?.(settings),
+        shareDefaults: settings.sourceDefaults[site] ?? settings.defaultPermissions,
+        syncOn: settings.siteSync[site],
       };
       return result;
+    }
+
+    case 'ai/suggest': {
+      const [library, settings] = await Promise.all([service.library(), service.getSettings()]);
+      const assistant = deps.assistant?.(settings);
+      if (!assistant) throw new MemoryError('Turn on the AI assistant in OmniMemory’s settings first.', 'state');
+      try {
+        const { suggestions } = await assistant.suggestFromChat(request.conversation, library);
+        // Anything the text rules find in the library (private memories included) is left out, and counted;
+        // the model's own count of what it skipped isn't reliable enough to show.
+        const fresh = suggestions.filter((s) => !findSimilar(s.text, library).some((match) => match.kind === 'duplicate'));
+        const result: SuggestResult = { suggestions: fresh, alreadyHave: suggestions.length - fresh.length };
+        return result;
+      } catch (error) {
+        if (error instanceof MemoryError) throw error;
+        throw new MemoryError(error instanceof Error ? error.message : 'The AI couldn’t answer.', 'state');
+      }
     }
 
     case 'context/build': {
@@ -146,11 +186,20 @@ async function dispatch(request: Request, site: SiteId, deps: RouterDeps): Promi
 
     case 'memory/create': {
       refuseSensitive(request.content);
+      // The same words twice is never useful. Only memories this page can
+      // already see are compared, so the refusal can't reveal anything else.
+      const [library, settings] = await Promise.all([service.library(), service.getSettings()]);
+      const wanted = normalizeText(request.content).replace(/[.!?]+$/, '');
+      const twin = shareableMemories(library, settings, site).find(
+        (memory) => normalizeText(memory.content).replace(/[.!?]+$/, '') === wanted,
+      );
+      if (twin) throw new MemoryError('You already have this memory.', 'invalid');
       const memory = await service.create({
         content: request.content,
         category: request.category,
         tags: request.tags,
         source: site,
+        permissions: request.permissions,
       });
       return toShared(memory);
     }
@@ -164,12 +213,26 @@ async function dispatch(request: Request, site: SiteId, deps: RouterDeps): Promi
     case 'memory/unshare': {
       await visibleMemory(service, site, request.id);
       await service.update(request.id, { permissions: { [site]: false } });
+      noteRemoval(request.id, site, 'unshare');
       return null;
     }
 
     case 'memory/delete': {
       await visibleMemory(service, site, request.id);
       await service.remove([request.id]);
+      noteRemoval(request.id, site, 'delete');
+      return null;
+    }
+
+    case 'memory/undo': {
+      // Only what this same chatbot hid or deleted in the last few minutes.
+      const entry = recentRemovals.get(request.id);
+      if (!entry || entry.site !== site || Date.now() - entry.at > UNDO_MS) {
+        throw new MemoryError('That can’t be undone from here any more. Use the memory manager.', 'not-found');
+      }
+      recentRemovals.delete(request.id);
+      if (entry.kind === 'delete') await service.restore([request.id]);
+      else await service.update(request.id, { permissions: { [site]: true } });
       return null;
     }
 

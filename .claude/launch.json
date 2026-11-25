@@ -4,8 +4,23 @@
     {
       "name": "omnimemory-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5183
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5190",
+        "-d",
+        "landing"
+      ],
+      "port": 5190
     }
   ]
 }

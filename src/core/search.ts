@@ -1,4 +1,4 @@
-import { contentTokens, normalizeText, rawTokens, stem } from './text';
+import { canonical, contentTokens, editDistance, normalizeText, rawTokens, stem } from './text';
 import type { Memory } from './types';
 
 /**
@@ -22,6 +22,8 @@ interface IndexedMemory {
   text: string;
   tokens: string[];
   stems: Set<string>;
+  /** Stems with synonyms folded together ("brief" → "short"). */
+  groups: Set<string>;
   tagTokens: Set<string>;
 }
 
@@ -34,6 +36,7 @@ function indexMemory(memory: Memory): IndexedMemory {
     text,
     tokens,
     stems: new Set(tokens.map(stem)),
+    groups: new Set(tokens.map((token) => canonical(stem(token)))),
     tagTokens: new Set(rawTokens(tagText)),
   };
 }
@@ -44,6 +47,12 @@ function termScore(entry: IndexedMemory, term: string): number {
   else if (entry.stems.has(stem(term))) best = 2.5;
   else if (entry.tokens.some((token) => token.startsWith(term))) best = 2;
   else if (term.length >= 3 && entry.text.includes(term)) best = 1;
+  else if (term.length >= 4 && entry.groups.has(canonical(stem(term)))) best = 1.8; // a synonym
+  else if (term.length >= 5) {
+    // A typo: "robtics" still finds "robotics".
+    const allowed = term.length >= 8 ? 2 : 1;
+    if (entry.tokens.some((token) => token.length >= 4 && editDistance(term, token, allowed) <= allowed)) best = 1.2;
+  }
   if (best > 0 && [...entry.tagTokens].some((tag) => tag.startsWith(term))) best *= 1.5;
   return best;
 }

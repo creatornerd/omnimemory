@@ -53,6 +53,13 @@ export async function closeStaleBackgroundTabs(): Promise<void> {
   }
 }
 
+/** The page a background sync tab opens: for Gemini, the Google account it was last used with. */
+async function pageToOpen(site: SiteId): Promise<string> {
+  if (site !== 'gemini') return PAGES[site].open;
+  const account = (await getSyncService().state(site)).cache.account ?? '';
+  return /^\/u\/\d{1,2}$/.test(account) ? `https://gemini.google.com${account}/app` : PAGES[site].open;
+}
+
 /** Get one chatbot synced now. `refresh` also re-reads everything it remembers. */
 export async function syncSite(site: SiteId, refresh = false, userAsked = false): Promise<'tab' | 'background' | 'none'> {
   if (!SYNC_MODES[site]) return 'none';
@@ -72,7 +79,10 @@ export async function syncSite(site: SiteId, refresh = false, userAsked = false)
 
   const settings = await getService().getSettings();
   if (!settings.syncInBackground && !userAsked) return 'none';
-  const tab = await chrome.tabs.create({ url: PAGES[site].open, active: false });
+  // The new tab's script asks for this when it starts, so a "Sync now" that
+  // arrives before the page has loaded isn't lost.
+  if (refresh || userAsked) await getSyncService().setCache(site, 'requested', '1');
+  const tab = await chrome.tabs.create({ url: await pageToOpen(site), active: false });
   if (tab.id === undefined) return 'none';
   await setSyncTab(site, { tabId: tab.id, at: Date.now() });
   setTimeout(() => void finishBackgroundTab(site), BACKGROUND_TAB_TIMEOUT_MS);

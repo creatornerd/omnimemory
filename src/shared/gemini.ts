@@ -14,6 +14,10 @@ export class AiError extends Error {
   constructor(
     message: string,
     readonly retryable = false,
+    /** "limit": today's shared allowance is used up. */
+    readonly code?: 'limit',
+    /** Gemini's HTTP status, when it answered with an error. */
+    readonly status?: number,
   ) {
     super(message);
     this.name = 'AiError';
@@ -74,7 +78,9 @@ async function generateOnce(request: GeminiRequest, key: string, model: string):
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
     promptFeedback?: { blockReason?: string };
   } | null;
-  if (!response.ok) throw new AiError(explain(response.status, body?.error?.message ?? ''), response.status >= 500);
+  if (!response.ok) {
+    throw new AiError(explain(response.status, body?.error?.message ?? ''), response.status >= 500, undefined, response.status);
+  }
   if (body?.promptFeedback?.blockReason) throw new AiError('Gemini declined to answer this one.');
 
   const text = (body?.candidates?.[0]?.content?.parts ?? []).map((part) => part.text ?? '').join('');

@@ -6,6 +6,7 @@ import { Badge, Button, Notice } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { daysLeftInTrash, plural, shortDate } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
+import { Help } from './help';
 
 export function Trash({ store }: { store: Store }) {
   const { service, trash, loading } = store;
@@ -15,11 +16,13 @@ export function Trash({ store }: { store: Store }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line px-6 pt-5 pb-3">
+      <header className="mx-auto flex w-full max-w-[900px] flex-wrap items-start gap-3 px-10 pt-8 pb-4 max-md:px-5">
         <div className="mr-auto">
-          <h1 className="text-base font-semibold">Recently Deleted</h1>
-          <p className="text-xs text-ink-3">
-            {plural(trash.length, 'memory', 'memories')} · kept for {TRASH_RETENTION_DAYS} days, then erased
+          <h1 className="flex items-center gap-1.5 text-[22px] font-semibold tracking-[-0.02em]">
+            Recently deleted <Help id="trash.page" />
+          </h1>
+          <p className="mt-1.5 text-[13.5px] text-ink-2">
+            Deleted memories wait here for {TRASH_RETENTION_DAYS} days. Restoring one brings back its sharing settings too.
           </p>
         </div>
         <Button
@@ -37,26 +40,26 @@ export function Trash({ store }: { store: Store }) {
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="px-6 pt-3">
+        <div className="mx-auto max-w-[900px] px-10 pb-16 max-md:px-5">
           <Notice tone="info">
             Deleted memories are never shared with any chatbot. When chatbot memory sync is on, deleting a
             memory also removes it from those chatbots’ memory, and restoring it puts it back. ChatGPT’s own
             AI-written memory summary isn’t changed by OmniMemory.
           </Notice>
-        </div>
 
+        <div className="mt-4 overflow-hidden rounded-[14px] border border-line bg-surface">
         {!loading && trash.length === 0 && (
-          <p className="px-6 py-16 text-center text-xs text-ink-3">Nothing here. Deleted memories show up in this list.</p>
+          <p className="px-6 py-12 text-center text-[13.5px] text-ink-3">Nothing here. Deleted memories show up in this list.</p>
         )}
 
-        <ul className="mt-3">
+        <ul className="divide-y divide-line">
           {trash.map((memory) => {
             const daysLeft = daysLeftInTrash(memory.deleted_at);
             return (
-              <li key={memory.id} className="flex items-start gap-3 border-b border-line px-6 py-3 first:border-t">
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-3 text-[13px] leading-relaxed text-ink-2">{memory.content}</p>
-                  <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-ink-3">
+              <li key={memory.id} className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+                <div className="min-w-[220px] flex-1">
+                  <p className="line-clamp-3 text-sm leading-normal text-ink-2">{memory.content}</p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                     <Badge>{memory.category}</Badge>
                     {memory.deleted_at && <span>Deleted {shortDate(memory.deleted_at)}</span>}
                     <span aria-hidden>·</span>
@@ -75,7 +78,7 @@ export function Trash({ store }: { store: Store }) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="hover:text-danger"
+                  className="text-danger hover:bg-danger-soft hover:text-danger"
                   icon={<Trash2 size={13} />}
                   onClick={() => setPurging(memory)}
                 >
@@ -85,6 +88,8 @@ export function Trash({ store }: { store: Store }) {
             );
           })}
         </ul>
+        </div>
+        </div>
       </div>
 
       <ConfirmDialog

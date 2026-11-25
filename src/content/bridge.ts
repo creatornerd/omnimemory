@@ -40,11 +40,14 @@ export async function send<K extends Request['type']>(
     }
   } else if (import.meta.env.DEV) {
     // No extension runtime (Vite dev fixture): call the same router in-page.
-    const [{ handleRequest }, { getService, openDashboard }] = await Promise.all([
-      import('../background/router'),
-      import('../shared/platform'),
-    ]);
-    response = await handleRequest(request, devSite, { service: getService(), openDashboard });
+    // (Dev only: this branch is removed from the extension build, so the
+    // real content script never sees the AI client or its key.)
+    const [{ handleRequest }, platform] = await Promise.all([import('../background/router'), import('../shared/platform')]);
+    response = await handleRequest(request, devSite, {
+      service: platform.getService(),
+      openDashboard: platform.openDashboard,
+      assistant: platform.getAssistant,
+    });
   } else {
     throw new ExtensionGone();
   }

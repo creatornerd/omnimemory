@@ -1,33 +1,119 @@
 import { useState, type ReactNode } from 'react';
 import { Download, Monitor, Moon, Sun, Upload } from 'lucide-react';
-import { buildExport, exportFileName, type SiteId, type ThemeSetting } from '../core';
+import { DEFAULT_SITE_COLORS, buildExport, exportFileName, type SiteId, type ThemeSetting } from '../core';
 import { SITE_LIST } from '../shared/sites';
 import { ConfirmDialog } from '../ui/components/Dialog';
 import { Button, Toggle } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { cx, plural } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
+import { SHARED_DAILY_LIMIT } from '../core';
+import { HAS_SHARED_KEY } from '../shared/platform';
 import { AiSettings } from './AiSettings';
 import { ImportDialog } from './ImportDialog';
+import { Help, type HelpId } from './help';
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+function Section({
+  title,
+  description,
+  padded,
+  help,
+  children,
+}: {
+  title: string;
+  description?: string;
+  help?: HelpId;
+  /** For content that isn't a list of rows. */
+  padded?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <section className="border-b border-line py-6 last:border-b-0">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {description && <p className="mt-1 max-w-xl text-xs leading-relaxed text-ink-3">{description}</p>}
-      <div className="mt-4 space-y-3">{children}</div>
+    <section className="mt-7">
+      <h2 className="flex items-center gap-1.5 text-[15px] font-semibold">
+        {title}
+        {help && <Help id={help} />}
+      </h2>
+      {description && <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-ink-3">{description}</p>}
+      <div
+        className={cx(
+          'mt-2.5 rounded-[14px] border border-line bg-surface',
+          padded ? 'space-y-3 p-4' : 'divide-y divide-line',
+        )}
+      >
+        {children}
+      </div>
     </section>
   );
 }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-4">
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px]">{label}</p>
-        {hint && <p className="text-xs leading-relaxed text-ink-3">{hint}</p>}
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5">
+      <div className="min-w-[200px] flex-1">
+        <p className="text-[13.5px] font-medium">{label}</p>
+        {hint && <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-3">{hint}</p>}
       </div>
       {children}
+    </div>
+  );
+}
+
+/** Colours offered for each chatbot; any other colour can be picked too. */
+const PALETTE = ['#3e9a7a', '#c4774f', '#8a70cc', '#3b5bdb', '#d14d72', '#c99a1f', '#2f8fb8', '#e0662f', '#6b8e23', '#5f5e59'];
+
+function ColorRow({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  fallback: string;
+  onChange: (color: string | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3.5">
+      <div className="flex min-w-[140px] flex-1 items-center gap-2.5">
+        <span className="size-3 rounded-full" style={{ background: value }} aria-hidden="true" />
+        <p className="text-[13.5px] font-medium">{label}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label={`${label} colour`}>
+        {PALETTE.map((color) => (
+          <button
+            key={color}
+            type="button"
+            role="radio"
+            aria-checked={value === color}
+            aria-label={color}
+            title={color}
+            onClick={() => onChange(color)}
+            className={cx(
+              'size-[22px] rounded-full ring-offset-2 ring-offset-surface transition-shadow',
+              value === color ? 'ring-2 ring-ink' : 'hover:ring-2 hover:ring-line-strong',
+            )}
+            style={{ background: color }}
+          />
+        ))}
+        <label
+          className="relative ml-1 inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-lg border border-line-strong px-2 text-xs font-medium text-ink-2 hover:bg-subtle"
+          title="Pick any colour"
+        >
+          Custom
+          <input
+            type="color"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            aria-label={`Pick any colour for ${label}`}
+            className="absolute inset-0 size-full cursor-pointer opacity-0"
+          />
+        </label>
+        {value !== fallback && (
+          <button type="button" onClick={() => onChange(null)} className="ml-1 text-xs font-medium text-brand hover:underline">
+            Reset
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -62,13 +148,14 @@ export function SettingsView({ store }: { store: Store }) {
 
   return (
     <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-2xl px-6 pb-10">
-        <header className="pt-5">
-          <h1 className="text-base font-semibold">Settings</h1>
+      <div className="mx-auto max-w-[760px] px-10 pb-16 max-md:px-5">
+        <header className="pt-8">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Settings</h1>
         </header>
 
         <Section
           title="Sharing"
+          help="settings.sharing"
           description="These switches sit above each memory’s own sharing toggles. Pausing never deletes or changes a memory — it only stops chatbots from receiving anything until you resume."
         >
           <Row label="Pause all sharing" hint="No chatbot receives any memory while this is on.">
@@ -98,6 +185,7 @@ export function SettingsView({ store }: { store: Store }) {
 
         <Section
           title="New memories"
+          help="settings.new"
           description="Who a memory is shared with when you first save it. You can change this per memory at any time. If sync is on for a chatbot, sharing a memory with it also writes it to that chatbot’s own memory settings."
         >
           {SITE_LIST.map((site) => (
@@ -115,6 +203,57 @@ export function SettingsView({ store }: { store: Store }) {
           ))}
         </Section>
 
+        <Section
+          title="Memories saved on a chatbot"
+          help="settings.source"
+          description="Things you save from the in-chat panel (or bring in from a chatbot) can follow different rules. For example, memories saved on ChatGPT can stay off Claude. The panel shows these choices each time you save, so you can still change them."
+        >
+          {SITE_LIST.map((source) => {
+            const own = settings.sourceDefaults[source.id];
+            const effective = own ?? settings.defaultPermissions;
+            return (
+              <Row
+                key={source.id}
+                label={`Saved on ${source.label}`}
+                hint={own ? 'Its own rule.' : 'Follows “New memories” above.'}
+              >
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`Share memories saved on ${source.label} with`}>
+                  {SITE_LIST.map((target) => (
+                    <button
+                      key={target.id}
+                      type="button"
+                      aria-pressed={effective[target.id]}
+                      onClick={() =>
+                        void service.updateSettings({
+                          sourceDefaults: { [source.id]: { ...effective, [target.id]: !effective[target.id] } },
+                        })
+                      }
+                      className={cx(
+                        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium transition-colors',
+                        effective[target.id]
+                          ? 'border-brand bg-brand-soft text-brand'
+                          : 'border-line-strong text-ink-3 hover:text-ink-2',
+                      )}
+                    >
+                      <span className="size-1.5 rounded-full" style={{ background: target.color }} />
+                      {target.label}
+                    </button>
+                  ))}
+                  {own && (
+                    <button
+                      type="button"
+                      className="ml-1 text-[12px] font-medium text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+                      onClick={() => void service.updateSettings({ sourceDefaults: { [source.id]: null } })}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </Row>
+            );
+          })}
+        </Section>
+
         <Section title="Suggestions">
           <Row
             label="Suggest memories that fit the conversation"
@@ -128,9 +267,13 @@ export function SettingsView({ store }: { store: Store }) {
           </Row>
         </Section>
 
-        <Section title="Appearance">
-          <Row label="Theme">
-            <div className="flex rounded-md border border-line-strong p-px" role="radiogroup" aria-label="Theme">
+        <Section
+          title="Appearance"
+          help="settings.appearance"
+          description="Each chatbot’s colour is used for its dots, bars and badges across the dashboard, the toolbar popup and the memory bar on chatbot sites."
+        >
+          <Row label="Theme" hint="Light, dark, or match your computer. The memory bar on chatbot sites follows the site’s own theme.">
+            <div className="inline-flex rounded-[9px] bg-muted p-[3px]" role="radiogroup" aria-label="Theme">
               {THEMES.map((theme) => (
                 <button
                   key={theme.value}
@@ -139,8 +282,8 @@ export function SettingsView({ store }: { store: Store }) {
                   aria-checked={settings.theme === theme.value}
                   onClick={() => void service.updateSettings({ theme: theme.value })}
                   className={cx(
-                    'inline-flex h-[26px] items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-colors',
-                    settings.theme === theme.value ? 'bg-muted text-ink' : 'text-ink-3 hover:text-ink',
+                    'inline-flex h-7 items-center gap-1.5 rounded-[7px] px-3 text-[12.5px] font-medium transition-colors',
+                    settings.theme === theme.value ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink',
                   )}
                 >
                   {theme.icon}
@@ -149,6 +292,15 @@ export function SettingsView({ store }: { store: Store }) {
               ))}
             </div>
           </Row>
+          {SITE_LIST.map((site) => (
+            <ColorRow
+              key={site.id}
+              label={site.label}
+              value={settings.siteColors[site.id]}
+              fallback={DEFAULT_SITE_COLORS[site.id]}
+              onChange={(color) => void service.updateSettings({ siteColors: { [site.id]: color } })}
+            />
+          ))}
         </Section>
 
         <Section
@@ -162,7 +314,7 @@ export function SettingsView({ store }: { store: Store }) {
             <label className="flex items-center gap-1.5 text-xs text-ink-2">
               <input
                 type="checkbox"
-                className="accent-(--om-accent)"
+                className="accent-(--om-brand)"
                 checked={includeTrash}
                 onChange={(event) => setIncludeTrash(event.target.checked)}
               />
@@ -197,12 +349,20 @@ export function SettingsView({ store }: { store: Store }) {
           </Row>
         </Section>
 
-        <Section title="AI assistant" description="Optional. Off unless you add your own Gemini API key.">
+        <Section
+          title="AI assistant"
+          padded
+          description={
+            HAS_SHARED_KEY
+              ? `Optional and off until you turn it on. ${SHARED_DAILY_LIMIT} free AI actions a day, or unlimited with your own Gemini key.`
+              : 'Optional. Off unless you add your own Gemini API key.'
+          }
+        >
           <AiSettings store={store} />
         </Section>
 
-        <Section title="Privacy">
-          <ul className="max-w-xl list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-ink-2">
+        <Section title="Privacy" padded>
+          <ul className="list-disc space-y-1.5 pl-4 text-[12.5px] leading-relaxed text-ink-2">
             <li>
               There is no OmniMemory account, server, analytics or telemetry. The only network requests are
               chatbot memory sync, which talks to ChatGPT, Claude and Gemini themselves, with your normal

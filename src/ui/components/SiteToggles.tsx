@@ -1,4 +1,4 @@
-import { Lock, LockOpen } from 'lucide-react';
+import { Lock, LockOpen, Sparkles } from 'lucide-react';
 import type { SiteId, SitePermissions } from '../../core/types';
 import { SITE_LIST } from '../../shared/sites';
 import { cx } from '../format';
@@ -11,13 +11,26 @@ interface SiteTogglesProps {
   onEnabled: (enabled: boolean) => void;
   /** "dots" for dense rows, "labels" where there is room to spell it out. */
   variant?: 'dots' | 'labels';
+  /** Shown only when the AI assistant is on: may the AI read this memory? */
+  aiAllowed?: boolean;
+  onAiAllowed?: (allowed: boolean) => void;
 }
 
 /**
  * Per-memory sharing controls: one toggle per chatbot plus a private switch.
  * Turning sharing off never deletes anything.
  */
-export function SiteToggles({ permissions, enabled, onPermission, onEnabled, variant = 'dots' }: SiteTogglesProps) {
+export function SiteToggles({
+  permissions,
+  enabled,
+  onPermission,
+  onEnabled,
+  variant = 'dots',
+  aiAllowed,
+  onAiAllowed,
+}: SiteTogglesProps) {
+  const shared = enabled && Object.values(permissions).some(Boolean);
+  const aiLive = shared && aiAllowed !== false;
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Sharing">
       {SITE_LIST.map((site) => {
@@ -74,6 +87,32 @@ export function SiteToggles({ permissions, enabled, onPermission, onEnabled, var
         {enabled ? <LockOpen size={12} /> : <Lock size={12} />}
         {variant === 'labels' && 'Private'}
       </button>
+      {onAiAllowed && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={aiLive}
+          aria-label="Let the AI assistant read this memory"
+          title={
+            !shared
+              ? 'The AI never reads private memories or ones not shared with any chatbot'
+              : aiAllowed !== false
+                ? 'The AI assistant may read this memory — click to keep it away from AI'
+                : 'Kept away from the AI assistant — click to allow'
+          }
+          disabled={!shared}
+          onClick={() => onAiAllowed(aiAllowed === false)}
+          className={cx(
+            'inline-flex items-center gap-1 rounded-full border text-[11px] font-medium transition-colors duration-100',
+            variant === 'dots' ? 'size-6 justify-center' : 'h-6 px-2',
+            aiLive ? 'border-line-strong bg-surface text-ink' : 'border-transparent text-ink-3 line-through hover:bg-muted',
+            !shared && 'opacity-50 hover:bg-transparent',
+          )}
+        >
+          <Sparkles size={11} />
+          {variant === 'labels' && 'AI'}
+        </button>
+      )}
     </div>
   );
 }

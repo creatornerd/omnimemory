@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candidatesFrom, discover, splitSentences, textKey, toFirstPerson, type FoundItem } from '../src/core/discover';
+import { candidatesFrom, discover, splitSentences, summaryName, textKey, toFirstPerson, type FoundItem } from '../src/core/discover';
 import type { RemoteSnapshot, SyncOp, OpResult } from '../src/core/sync';
 import { createHarness, createSyncHarness } from './helpers';
 
@@ -178,5 +178,54 @@ describe('the Review checklist', () => {
       ['g2', 'I prefer metric units.'],
     ]);
     expect(await syncGemini(h, gemini)).toEqual([]);
+  });
+});
+
+describe('real-world summary formats', () => {
+  it('rewrites a third-person summary written by name (Claude style)', () => {
+    const text = `**Work context**
+
+Sam is a nurse in Portland who works night shifts. She is studying for a certification.
+
+**Personal context**
+
+Sam plays piano and is on a climbing team. Sam's dog is called Max.
+
+**Top of mind**
+
+Sam has been planning a trip to Japan.`;
+    expect(candidatesFrom({ group: 'Memory summary (written by Claude)', text })).toEqual([
+      'I am a nurse in Portland who works night shifts.',
+      'I am studying for a certification.',
+      'I play piano and am on a climbing team.',
+      'My dog is called Max.',
+      'I have been planning a trip to Japan.',
+    ]);
+  });
+
+  it('adds the missing subject to clipped notes and drops Markdown (ChatGPT style)', () => {
+    const text = `## Preferences
+- Prefers concise answers without bullet lists.
+- **Is learning** C++ for robotics.
+1. Lives in Seattle, Washington.
+2) Has a dog named Max.
+You enjoy hiking and photography.`;
+    expect(candidatesFrom({ group: 'Memory summary (written by ChatGPT)', text })).toEqual([
+      'I prefer concise answers without bullet lists.',
+      'I am learning C++ for robotics.',
+      'I live in Seattle, Washington.',
+      'I have a dog named Max.',
+      'I enjoy hiking and photography.',
+    ]);
+  });
+
+  it('leaves sentences about other things alone', () => {
+    expect(toFirstPerson('Tennis is a hobby.')).toBe('Tennis is a hobby.');
+    expect(toFirstPerson('Seattle has rain most of the year.')).toBe('Seattle has rain most of the year.');
+  });
+
+  it('only treats a word as your name when it starts several sentences', () => {
+    expect(summaryName(['Sam is a nurse.', 'Sam has a dog.'])).toBe('Sam');
+    expect(summaryName(['Python is my favourite.', 'I like tea.'])).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import type { StorageBackend } from './backend';
-import { MAX_DISMISSED, discover, textKey, type DiscoverySource, type FoundItem } from './discover';
+import { MAX_DISMISSED, discover, groupFinds, textKey, type DiscoverySource, type FoundItem } from './discover';
 import { findSensitive } from './sensitive';
 import type { MemoryService } from './service';
 import {
@@ -28,7 +28,7 @@ import {
 import { MAX_CONTENT_LENGTH, SITE_IDS, type Category, type SiteId } from './types';
 
 /** How long a tab may hold a plan before another tab can take over. */
-const LOCK_MS = 2 * 60 * 1000;
+const LOCK_MS = 75 * 1000;
 
 /** Label for the entries OmniMemory manages on each chatbot. */
 const MANAGED_GROUP: Record<SiteId, string> = {
@@ -165,7 +165,8 @@ export class SyncService {
         now,
       ),
       inflight: { planId, ops: plan.ops, startedAt: now.toISOString() },
-      cache: { ...state.cache, leftOut: JSON.stringify(plan.leftOut ?? []) },
+      // A pending "Sync now" is being answered.
+      cache: { ...withoutKey(state.cache, 'requested'), leftOut: JSON.stringify(plan.leftOut ?? []) },
     };
     state = this.withSnapshot(state, remote);
     state = { ...state, found: discover(site, this.discoverySources(state), library, [...state.dismissed, ...state.accepted]) };
@@ -324,16 +325,20 @@ export class SyncService {
     return sources;
   }
 
-  /** Everything waiting on the Review page, across all chatbots. */
+  /**
+   * Everything waiting on the Review page, across all chatbots. The same fact
+   * found on two chatbots is listed once (with "also on"), not twice.
+   */
   async allFound(): Promise<FoundItem[]> {
     const states = await Promise.all(SITE_IDS.map((site) => this.state(site)));
-    return states.flatMap((state) => state.found);
+    return groupFinds(states.flatMap((state) => state.found)).map((group) => group.shown);
   }
 
   /**
    * Keep the chosen suggestions: each becomes a memory (with the user's
    * edits), and everything else on the list is skipped so it isn't suggested
-   * again. The new memories then sync to every chatbot they're shared with.
+   * again. A decision about one find counts for its twins on other chatbots
+   * too. The new memories then sync to every chatbot they're shared with.
    */
   async review(
     keep: { id: string; text: string; category?: Category }[],
@@ -341,15 +346,24 @@ export class SyncService {
   ): Promise<{ added: number; refused: string[] }> {
     const refused: string[] = [];
     let added = 0;
-    const keepIds = new Map(keep.map((item) => [item.id, item.text]));
+    const keepText = new Map(keep.map((item) => [item.id, item.text]));
     const categories = new Map(keep.map((item) => [item.id, item.category]));
-    for (const site of SITE_IDS) {
-      let state = await this.state(site);
-      const handled = state.found.filter((item) => keepIds.has(item.id) || skip.includes(item.id));
-      if (handled.length === 0) continue;
-      const links = [...state.links];
-      for (const item of handled) {
-        const text = keepIds.get(item.id);
+    const skipped = new Set(skip);
+
+    const before = await Promise.all(SITE_IDS.map((site) => this.state(site)));
+    const twinOf = new Map<string, string>();
+    for (const group of groupFinds(before.flatMap((state) => state.found))) {
+      for (const twin of group.twins) twinOf.set(twin.id, group.shown.id);
+    }
+    const leader = (item: FoundItem) => twinOf.get(item.id) ?? item.id;
+    const kept = (item: FoundItem) => keepText.has(leader(item));
+    const handled = (item: FoundItem) => kept(item) || skipped.has(leader(item));
+
+    // 1. Make the memories (one per kept find, not one per chatbot).
+    const created = new Map<string, string>();
+    for (const state of before) {
+      for (const item of state.found) {
+        const text = keepText.get(item.id);
         if (text === undefined) continue;
         const content = text.replace(/\s+\n/g, '\n').trim().slice(0, MAX_CONTENT_LENGTH);
         if (!content) continue;
@@ -357,24 +371,33 @@ export class SyncService {
           refused.push(content);
           continue;
         }
-        const memory = await this.memories.create({ content, source: site, category: categories.get(item.id) });
+        const memory = await this.memories.create({ content, source: state.site, category: categories.get(item.id) });
+        created.set(item.id, memory.id);
         added += 1;
-        if (item.remoteId && SYNC_MODES[site] === 'items') {
-          // Link it to the entry it came from, so the chatbot isn't given a
-          // second copy (and gets the edited wording, if it was changed).
-          links.push({ memoryId: memory.id, remoteId: item.remoteId, pushedText: item.original, remoteText: item.original, owned: false });
-        }
+      }
+    }
+
+    // 2. Tidy each chatbot's list.
+    for (const site of SITE_IDS) {
+      const done = before.find((state) => state.site === site)!.found.filter(handled);
+      if (done.length === 0) continue;
+      const links: SyncLink[] = [];
+      for (const item of done) {
+        const memoryId = created.get(leader(item));
+        if (!memoryId || !kept(item) || !item.remoteId || SYNC_MODES[site] !== 'items') continue;
+        // Link it to the entry it came from, so the chatbot isn't given a
+        // second copy (and gets the edited wording, if it was changed).
+        links.push({ memoryId, remoteId: item.remoteId, pushedText: item.original, remoteText: item.original, owned: false });
       }
       // Re-read: a sync may have run meanwhile.
-      state = await this.state(site);
-      const handledIds = new Set(handled.map((item) => item.id));
-      const keyOf = (item: FoundItem) => textKey(item.text);
-      const keptKeys = handled.filter((item) => keepIds.has(item.id)).map(keyOf);
-      const skippedKeys = handled.filter((item) => !keepIds.has(item.id)).map(keyOf);
+      let state = await this.state(site);
+      const doneIds = new Set(done.map((item) => item.id));
+      const keptKeys = done.filter(kept).map((item) => textKey(item.text));
+      const skippedKeys = done.filter((item) => !kept(item)).map((item) => textKey(item.text));
       state = {
         ...state,
-        links: [...state.links, ...links.filter((link) => !state.links.some((l) => l.memoryId === link.memoryId))],
-        found: state.found.filter((item) => !handledIds.has(item.id)),
+        links: [...state.links, ...links.filter((link) => !state.links.some((l) => l.remoteId === link.remoteId))],
+        found: state.found.filter((item) => !doneIds.has(item.id)),
         dismissed: [...new Set([...state.dismissed, ...skippedKeys])].slice(-MAX_DISMISSED),
         accepted: [...new Set([...state.accepted, ...keptKeys])].slice(-MAX_DISMISSED),
       };
@@ -498,6 +521,11 @@ export class SyncService {
   async reset(site: SiteId): Promise<void> {
     await this.save(emptySyncState(site));
   }
+}
+
+function withoutKey(cache: Record<string, string>, key: string): Record<string, string> {
+  const { [key]: _dropped, ...rest } = cache;
+  return rest;
 }
 
 function safeIds(value: string | undefined): string[] {

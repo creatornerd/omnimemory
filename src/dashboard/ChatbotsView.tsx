@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, Check, ChevronRight, Link2, RefreshCw } from 'lucide-react';
+import { ArrowRight, Check, ChevronRight, Inbox, Link2, RefreshCw } from 'lucide-react';
 import {
   SITE_IDS,
+  BLOCK_LIMITS,
   SYNC_MODES,
   SYNC_TARGETS,
   pendingChanges,
+  renderBlock,
   syncBlocked,
   type RemoteEntry,
   type SiteId,
@@ -21,10 +23,11 @@ import { Badge, Button, Notice, Toggle } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { plural, timeAgo } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
+import { Help } from './help';
 
-type States = Partial<Record<SiteId, SiteSyncState>>;
+export type States = Partial<Record<SiteId, SiteSyncState>>;
 
-function useSyncStates(): States {
+export function useSyncStates(): States {
   const [states, setStates] = useState<States>({});
   const load = useCallback(async () => {
     const sync = getSyncService();
@@ -44,7 +47,7 @@ function useSyncStates(): States {
   return states;
 }
 
-function StatusLine({ site, state, store }: { site: SiteId; state: SiteSyncState | undefined; store: Store }) {
+export function StatusLine({ site, state, store }: { site: SiteId; state: SiteSyncState | undefined; store: Store }) {
   const { settings, library } = store;
   const blocked = syncBlocked(settings, site);
   const pending = state ? pendingChanges(site, library, settings, state) : 0;
@@ -110,6 +113,18 @@ function EntryList({ site, entries, links, store }: { site: SiteId; entries: Rem
   );
 }
 
+/** Said plainly, so nobody expects OmniMemory to edit a chatbot's own AI-written memory. */
+const WRITES: Record<SiteId, string> = {
+  chatgpt: 'Your shared memories, as a marked block in Custom instructions → “More about you”. Your own text there is never changed.',
+  claude: 'Your shared memories, as a marked block in Settings → Your Claude → Instructions. Your own text there is never changed.',
+  gemini: 'Each shared memory as one of Gemini’s Instructions. Entries Gemini already had are only linked or removed with your OK.',
+};
+const READS: Record<SiteId, string> = {
+  chatgpt: 'ChatGPT’s own Memory, which ChatGPT writes from your chats. New things in it are offered on Review; OmniMemory can’t edit it.',
+  claude: 'Claude’s own Memory, which Claude writes from your chats. New things in it are offered on Review; OmniMemory can’t edit it.',
+  gemini: 'Instructions you added in Gemini yourself. New ones are offered on Review.',
+};
+
 const SITE_NOTES: Record<SiteId, string> = {
   chatgpt:
     'ChatGPT reads custom instructions when a new chat starts. Its own Memory summary is written by ChatGPT from your chats; it’s shown here, but OmniMemory only reads it.',
@@ -122,18 +137,41 @@ const SITE_NOTES: Record<SiteId, string> = {
 function Fold({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-3">
+    <div className="mt-4">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 text-left text-[13px] font-medium text-ink-2 hover:text-ink"
+        className="flex w-full items-center gap-1.5 text-left text-[13px] font-medium text-ink hover:text-ink-2"
       >
         <ChevronRight size={14} className={open ? 'rotate-90 transition-transform' : 'transition-transform'} />
         {title}
-        {hint && <span className="text-[11px] font-normal text-ink-3">· {hint}</span>}
+        {hint && <span className="font-normal text-ink-3">· {hint}</span>}
       </button>
-      {open && <div className="mt-2">{children}</div>}
+      {open && <div className="mt-2.5">{children}</div>}
+    </div>
+  );
+}
+
+/** How much of the chatbot's field OmniMemory's block uses (block mode only). */
+function SpaceUsed({ site, state }: { site: SiteId; state: SiteSyncState | undefined }) {
+  const limits = SYNC_MODES[site] === 'block' ? BLOCK_LIMITS[site] : undefined;
+  if (!limits || !state?.lastSyncAt) return null;
+  const used = renderBlock(state.links.map((link) => link.pushedText)).length;
+  const share = Math.min(100, Math.round((used / limits.block) * 100));
+  return (
+    <div className="min-w-[220px] flex-1">
+      <div className="flex justify-between text-xs text-ink-3">
+        <span className="flex items-center gap-1">
+          Space used <Help id="chatbots.space" />
+        </span>
+        <span className="tabular-nums">
+          {used.toLocaleString()} of {limits.block.toLocaleString()} characters
+        </span>
+      </div>
+      <div className="mt-2 h-[5px] rounded-full bg-muted">
+        <div className="h-full rounded-full" style={{ width: `${share}%`, background: SITES[site].color }} />
+      </div>
     </div>
   );
 }
@@ -173,10 +211,10 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface">
-      <header className="flex flex-wrap items-center gap-3 px-4 py-3">
+    <section className="rounded-[14px] border border-line bg-surface">
+      <header className="flex flex-wrap items-center gap-2.5 px-4 py-3.5">
         <span className="size-2.5 rounded-full" style={{ background: info.color }} aria-hidden="true" />
-        <h2 className="text-sm font-semibold">{info.label}</h2>
+        <h2 className="text-[15px] font-semibold">{info.label}</h2>
         <StatusLine site={site} state={state} store={store} />
         <div className="ml-auto flex items-center gap-3">
           {supported && (
@@ -184,7 +222,7 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
               Sync now
             </Button>
           )}
-          <label className="flex items-center gap-2 text-xs text-ink-2">
+          <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
             Keep in sync
             <Toggle
               label={`Keep ${info.label}’s memory in sync`}
@@ -196,7 +234,7 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
         </div>
       </header>
 
-      <div className="border-t border-line px-4 py-3">
+      <div className="border-t border-line px-4 pt-3.5 pb-4">
         {!supported ? (
           <p className="text-xs leading-relaxed text-ink-3">
             Syncing with {info.label}’s own memory isn’t available yet. You can still use the OmniMemory button on{' '}
@@ -204,8 +242,17 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
           </p>
         ) : (
           <>
-            <p className="text-xs leading-relaxed text-ink-3" title={SITE_NOTES[site]}>
-              Writes to {SYNC_TARGETS[site]}.
+            <div className="flex flex-wrap gap-6 text-[13px]">
+              <div>
+                <div className="flex items-center gap-1 text-xs text-ink-3">
+                  Writes to <Help id="chatbots.writes" />
+                </div>
+                <div className="mt-0.5 font-medium">{SYNC_TARGETS[site]}</div>
+              </div>
+              <SpaceUsed site={site} state={state} />
+            </div>
+            <p className="mt-3 max-w-[640px] text-[12.5px] leading-relaxed text-ink-3">
+              {WRITES[site]} It only reads {READS[site]}
             </p>
             {state && blocked === null && (
               <Approvals
@@ -230,16 +277,19 @@ function SiteCard({ site, state, store }: { site: SiteId; state: SiteSyncState |
                 title={`What ${info.label} remembers (${state.snapshot.entries.length})`}
                 hint={`checked ${timeAgo(state.snapshot.fetchedAt)}`}
               >
-                {SITE_NOTES[site] && <p className="mb-2 text-[11px] leading-relaxed text-ink-3">{SITE_NOTES[site]}</p>}
+                {SITE_NOTES[site] && <p className="mb-2.5 text-xs leading-relaxed text-ink-3">{SITE_NOTES[site]}</p>}
                 <EntryList site={site} entries={state.snapshot.entries} links={state.links} store={store} />
               </Fold>
             ) : (
               blocked === null && (
-                <p className="mt-2 text-xs text-ink-3">Not checked yet. Open {info.hosts[0]} while signed in, or press Sync now.</p>
+                <p className="mt-3 text-[12.5px] text-ink-3">Not checked yet. Open {info.hosts[0]} while signed in, or press Sync now.</p>
               )
             )}
             {state && state.activity.length > 0 && (
               <Fold title={`Recent activity (${state.activity.length})`}>
+                <p className="mb-2 flex items-center gap-1 text-xs text-ink-3">
+                  What sync changed, newest first <Help id="chatbots.activity" />
+                </p>
                 <ActivityFeed site={site} activity={state.activity} />
               </Fold>
             )}
@@ -257,10 +307,12 @@ export function ChatbotsView({ store }: { store: Store }) {
 
   return (
     <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-4 px-6 pb-10">
-        <header className="pt-5">
-          <h1 className="text-base font-semibold">Chatbots</h1>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-3">
+      <div className="mx-auto max-w-[860px] space-y-4 px-10 pb-16 max-md:px-5">
+        <header className="pt-8">
+          <h1 className="flex items-center gap-1.5 text-[22px] font-semibold tracking-[-0.02em]">
+            Chatbots <Help id="chatbots.page" />
+          </h1>
+          <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-relaxed text-ink-2">
             Keep each chatbot’s own memory in step with yours. Nothing is written without your OK, and every change can
             be undone.
           </p>
@@ -269,8 +321,9 @@ export function ChatbotsView({ store }: { store: Store }) {
         {found.length > 0 && (
           <a
             href="#/review"
-            className="flex items-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3 text-[13px] hover:bg-subtle"
+            className="flex items-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3.5 text-[13.5px] hover:bg-subtle hover:no-underline"
           >
+            <Inbox size={16} className="shrink-0 text-ink-2" />
             <span className="min-w-0 flex-1">
               <strong className="font-semibold">{plural(found.length, 'thing', 'things')} to review.</strong>{' '}
               <span className="text-ink-2">Your chatbots remember things OmniMemory doesn’t have yet.</span>

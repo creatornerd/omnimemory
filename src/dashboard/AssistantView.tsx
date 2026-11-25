@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Check, Loader2, Minus, Pencil, Plus, RotateCcw, Sparkles, Undo2 } from 'lucide-react';
-import { CHAT_MODEL_LABEL, type ChatChange, type ChatTurn, type Memory } from '../core';
-import { getAssistant } from '../shared/platform';
+import { CHAT_MODEL_LABEL, SHARED_DAILY_LIMIT, type ChatChange, type ChatTurn, type Memory } from '../core';
+import { onChange } from '../shared/change-bus';
+import { HAS_SHARED_KEY, aiStatus, getAssistant } from '../shared/platform';
 import { Badge, Button, Logo, Notice } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
 import { cx, plural } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
+import { Help } from './help';
 
 /**
  * Assistant: change your memories by asking. Gemini proposes changes (add,
@@ -88,11 +90,22 @@ export function AssistantView({ store }: { store: Store }) {
   const [thinking, setThinking] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [applying, setApplying] = useState<number | null>(null);
+  const [allowance, setAllowance] = useState<{ left: number; limit: number } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
   const setMessages = (update: (current: Message[]) => Message[]) =>
     setMessagesState((current) => (saved = update(current)));
+
+  // With the shared key, show what's left of today's free actions.
+  useEffect(() => {
+    const load = () =>
+      void aiStatus().then((status) =>
+        setAllowance(status.source === 'shared' ? { left: Math.max(0, status.limit - status.used), limit: status.limit } : null),
+      );
+    load();
+    return onChange(load);
+  }, []);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -209,10 +222,13 @@ export function AssistantView({ store }: { store: Store }) {
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="max-w-sm text-center">
           <Sparkles size={22} className="mx-auto text-ink-3" />
-          <h1 className="mt-3 text-base font-semibold">Edit your memories by asking</h1>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
+          <h1 className="mt-3 text-[22px] font-semibold tracking-[-0.02em]">Edit your memories by asking</h1>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
             “Remove the repeats”, “I moved to Austin”, “What do you know about me?” — the Assistant suggests the changes
-            and you approve them. It needs your Gemini API key.
+            and you approve them.{' '}
+            {HAS_SHARED_KEY
+              ? `Turn it on in Settings to get ${SHARED_DAILY_LIMIT} free actions a day, or add your own Gemini key for unlimited use.`
+              : 'It needs your Gemini API key.'}
           </p>
           <Button className="mt-4" variant="primary" onClick={() => (window.location.hash = '/settings')}>
             Set up in Settings
@@ -226,11 +242,19 @@ export function AssistantView({ store }: { store: Store }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-line px-6 pt-5 pb-3">
+      <header className="mx-auto flex w-full max-w-[840px] items-start gap-3 px-10 pt-8 pb-2 max-md:px-5">
         <div className="mr-auto">
-          <h1 className="text-base font-semibold">Assistant</h1>
-          <p className="text-xs text-ink-3">
-            Ask to add, fix, merge or remove memories. Nothing changes until you press Apply. · {CHAT_MODEL_LABEL}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="flex items-center gap-1.5 text-[22px] font-semibold tracking-[-0.02em]">
+              Assistant <Help id="assistant.page" />
+            </h1>
+            <span className="inline-flex h-[22px] items-center rounded-md bg-muted px-2 text-xs font-medium text-ink-2">
+              {CHAT_MODEL_LABEL}
+            </span>
+          </div>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
+            Change your memories by asking, even several things at once. Nothing changes until you tick what you want and press Apply, and Undo puts everything back. It only answers questions about your memories and OmniMemory.
+            {allowance && ` · ${allowance.left} of ${allowance.limit} free AI actions left today`}
           </p>
         </div>
         {messages.length > 0 && (
@@ -241,13 +265,13 @@ export function AssistantView({ store }: { store: Store }) {
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-4 px-6 py-5">
+        <div className="mx-auto max-w-[760px] space-y-[18px] px-10 py-6 max-md:px-5">
           {messages.length === 0 && (
             <div className="py-10 text-center">
               <span className="mx-auto flex size-10 items-center justify-center rounded-xl bg-subtle">
                 <Sparkles size={18} />
               </span>
-              <p className="mt-3 text-[13px] font-medium">What should change?</p>
+              <p className="mt-3 text-sm font-semibold">What should change?</p>
               <p className="mt-1 text-xs text-ink-3">
                 The Assistant can see your {plural(shared, 'shared memory', 'shared memories')}. Private ones stay hidden.
               </p>
@@ -256,7 +280,7 @@ export function AssistantView({ store }: { store: Store }) {
                   <button
                     key={starter}
                     type="button"
-                    className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-2 hover:border-line-strong hover:text-ink"
+                    className="h-7 rounded-full border border-line bg-surface px-[11px] text-[12.5px] text-ink-2 hover:border-line-strong hover:text-ink"
                     onClick={() => (starter.includes('—') ? (setDraft(starter.replace(/ — .*/, ' to ')), input.current?.focus()) : void send(starter))}
                   >
                     {starter}
@@ -270,7 +294,7 @@ export function AssistantView({ store }: { store: Store }) {
             if (message.role === 'user') {
               return (
                 <div key={message.id} className="flex justify-end">
-                  <p className="max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap text-accent-fg">
+                  <p className="max-w-[80%] rounded-[14px] bg-muted px-3.5 py-2.5 text-sm leading-normal whitespace-pre-wrap text-ink">
                     {message.text}
                   </p>
                 </div>
@@ -286,12 +310,12 @@ export function AssistantView({ store }: { store: Store }) {
             const chosen = message.changes.length - message.off.length;
             const busy = applying === message.id;
             return (
-              <div key={message.id} className="flex gap-2.5">
+              <div key={message.id} className="flex gap-3">
                 <span className="mt-0.5 shrink-0">
-                  <Logo size={22} />
+                  <Logo size={24} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{message.text}</p>
+                  <p className="mt-0.5 text-sm leading-normal whitespace-pre-wrap">{message.text}</p>
                   {message.fellBack && (
                     <p className="mt-1 text-[11px] text-ink-3">Gemini 3.5 Flash was busy, so Flash Lite answered.</p>
                   )}
@@ -314,7 +338,7 @@ export function AssistantView({ store }: { store: Store }) {
                           />
                         ))}
                       </ul>
-                      <div className="flex items-center gap-2 border-t border-line bg-subtle/60 px-3 py-2">
+                      <div className="flex items-center justify-end gap-2 border-t border-line bg-canvas px-3 py-2.5">
                         {message.status === 'pending' && (
                           <>
                             <Button
@@ -362,13 +386,13 @@ export function AssistantView({ store }: { store: Store }) {
       </div>
 
       <form
-        className="border-t border-line px-6 py-3"
+        className="px-10 pt-2 pb-5 max-md:px-5"
         onSubmit={(event) => {
           event.preventDefault();
           void send(draft);
         }}
       >
-        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-xl border border-line-strong bg-surface p-2 focus-within:ring-2 focus-within:ring-focus">
+        <div className="mx-auto flex max-w-[760px] items-end gap-2.5 rounded-[14px] border border-line-strong bg-surface py-2.5 pr-2.5 pl-4 focus-within:border-brand">
           <textarea
             ref={input}
             value={draft}
@@ -380,14 +404,22 @@ export function AssistantView({ store }: { store: Store }) {
               }
             }}
             rows={1}
-            placeholder="e.g. “Merge everything about robotics into one memory”"
+            placeholder="e.g. “Merge everything about my job into one memory”"
             aria-label="Message the Assistant"
-            className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] leading-relaxed outline-none"
+            className="max-h-40 min-h-8 flex-1 resize-none bg-transparent py-1 text-sm leading-normal outline-none"
           />
-          <Button type="submit" variant="primary" size="sm" aria-label="Send" disabled={thinking || !draft.trim()}>
-            <ArrowUp size={14} />
-          </Button>
+          <button
+            type="submit"
+            aria-label="Send"
+            disabled={thinking || !draft.trim()}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-40"
+          >
+            <ArrowUp size={16} />
+          </button>
         </div>
+        <p className="mx-auto mt-2 max-w-[760px] text-center text-[11.5px] text-ink-3">
+          Private memories and anything that looks like a password are never sent.
+        </p>
       </form>
     </div>
   );

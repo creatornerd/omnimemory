@@ -223,3 +223,26 @@ describe('MemoryService — settings', () => {
     expect(settings.theme).toBe('system');
   });
 });
+
+describe('settings changes made at the same time', () => {
+  it('keeps every change instead of the last one winning', async () => {
+    const { service } = createHarness();
+    await Promise.all([
+      service.updateSettings({ siteSync: { chatgpt: true } }),
+      service.updateSettings({ siteSync: { claude: true } }),
+      service.updateSettings({ siteSync: { gemini: true } }),
+    ]);
+    expect((await service.getSettings()).siteSync).toEqual({ chatgpt: true, claude: true, gemini: true });
+  });
+
+  it('keeps chatbot colours valid', async () => {
+    const { service } = createHarness();
+    await service.updateSettings({ siteColors: { chatgpt: '#D14D72', claude: 'red' } });
+    let colors = (await service.getSettings()).siteColors;
+    expect(colors.chatgpt).toBe('#d14d72');
+    expect(colors.claude).toBe('#c4774f');
+    await service.updateSettings({ siteColors: { chatgpt: null } });
+    colors = (await service.getSettings()).siteColors;
+    expect(colors.chatgpt).toBe('#3e9a7a');
+  });
+});

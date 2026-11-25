@@ -16,4 +16,6 @@ export const geminiAdapter = createAdapter({
   anchorSelectors: ['input-area-v2', '.input-area-container', '.text-input-field', 'rich-textarea'],
   messageSelectors: ['user-query, model-response', '.conversation-container', 'message-content'],
   insertStrategies: ['execCommand', 'paste', 'beforeinput'],
+  // Gemini shows quick-reply buttons ("Yes", "Tell me more") right above the box.
+  launcher: 'below',
 });

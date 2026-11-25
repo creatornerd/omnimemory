@@ -2,9 +2,12 @@ import {
   CATEGORIES,
   MAX_CONTENT_LENGTH,
   MAX_TAGS,
+  SITE_IDS,
   isCategory,
   type Category,
   type SiteId,
+  type SitePermissions,
+  type Source,
 } from '../core/types';
 import type { SharingBlock } from '../core/permissions';
 import type { MatchKind } from '../core/duplicates';
@@ -23,9 +26,19 @@ import type { BeginResult, CommitSummary, SyncStatus } from '../core/sync-servic
 export const MAX_QUERY_LENGTH = 200;
 export const MAX_PAGE_TEXT_LENGTH = 6000;
 export const MAX_IDS = 100;
+export const MAX_CONVERSATION_TEXT = 8000;
 
-export type DashboardView = 'library' | 'assistant' | 'review' | 'chatbots' | 'trash' | 'settings';
-export const DASHBOARD_VIEWS: readonly DashboardView[] = ['library', 'assistant', 'review', 'chatbots', 'trash', 'settings'];
+export type DashboardView = 'home' | 'library' | 'assistant' | 'review' | 'chatbots' | 'trash' | 'settings' | 'about';
+export const DASHBOARD_VIEWS: readonly DashboardView[] = [
+  'home',
+  'library',
+  'assistant',
+  'review',
+  'chatbots',
+  'trash',
+  'settings',
+  'about',
+];
 
 // Limits for what a chatbot page may report about its own memory.
 export const MAX_REMOTE_ENTRIES = 300;
@@ -37,11 +50,15 @@ export type Request =
   | { type: 'context/build'; ids: string[] }
   | { type: 'context/used'; ids: string[] }
   | { type: 'memory/review'; content: string }
-  | { type: 'memory/create'; content: string; category?: Category; tags: string[] }
+  | { type: 'memory/create'; content: string; category?: Category; tags: string[]; permissions?: Partial<SitePermissions> }
   | { type: 'memory/update'; id: string; content: string }
   | { type: 'memory/unshare'; id: string }
   | { type: 'memory/delete'; id: string }
+  /** Take back a hide or delete this page made a moment ago. */
+  | { type: 'memory/undo'; id: string }
   | { type: 'ui/open-dashboard'; view: DashboardView }
+  // Optional AI: suggest memories from the chat on screen (only when the user asks).
+  | { type: 'ai/suggest'; conversation: string }
   // Chatbot memory sync (see core/sync.ts). The content script reads and
   // writes the chatbot's own memory; the worker decides what to write.
   | { type: 'sync/status' }
@@ -58,14 +75,29 @@ export interface SharedMemory {
   category: Category;
   tags: string[];
   updated_at: string;
+  /** Where it was saved (a chatbot, by hand, an import). */
+  source: Source;
 }
 
 export interface QueryResult {
   site: SiteId;
+  /** This chatbot's colour, as chosen in Settings → Appearance. */
+  color: string;
   blocked: SharingBlock;
   /** How many memories this site may currently receive in total. */
   total: number;
   items: { memory: SharedMemory; relevant: boolean }[];
+  /** The AI assistant is on, so "suggest from this chat" can be offered. */
+  ai: boolean;
+  /** Who a memory saved here is shared with unless the user changes it. */
+  shareDefaults: SitePermissions;
+  /** Memory sync with this chatbot is on. */
+  syncOn: boolean;
+}
+
+export interface SuggestResult {
+  suggestions: { text: string; category: Category }[];
+  alreadyHave: number;
 }
 
 /** The exact text that will be inserted or copied, built by the service worker. */
@@ -92,7 +124,9 @@ export interface ResponseMap {
   'memory/update': SharedMemory;
   'memory/unshare': null;
   'memory/delete': null;
+  'memory/undo': null;
   'ui/open-dashboard': null;
+  'ai/suggest': SuggestResult;
   'sync/status': SyncStatus;
   'sync/begin': BeginResult;
   'sync/commit': CommitSummary;
@@ -129,6 +163,18 @@ function stringList(value: unknown, maxItems: number, maxLength: number, field: 
 function optionalStr(value: unknown, max: number, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
   return str(value, max, field, true);
+}
+
+function permissions(value: unknown): Partial<SitePermissions> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InvalidMessage('permissions is invalid');
+  const raw = value as Record<string, unknown>;
+  const out: Partial<SitePermissions> = {};
+  for (const site of SITE_IDS) {
+    if (raw[site] === undefined) continue;
+    if (typeof raw[site] !== 'boolean') throw new InvalidMessage('permissions is invalid');
+    out[site] = raw[site] as boolean;
+  }
+  return out;
 }
 
 function planId(value: unknown): string {
@@ -227,6 +273,8 @@ function parseInner(raw: unknown): Request | null {
       return { type: message.type, ids: stringList(message.ids, MAX_IDS, 64, 'ids').map(id) };
     case 'memory/review':
       return { type: 'memory/review', content: str(message.content, MAX_CONTENT_LENGTH, 'content') };
+    case 'ai/suggest':
+      return { type: 'ai/suggest', conversation: str(message.conversation, MAX_CONVERSATION_TEXT, 'conversation') };
     case 'memory/create': {
       if (message.category !== undefined && !isCategory(message.category)) {
         throw new InvalidMessage(`category must be one of ${CATEGORIES.join(', ')}`);
@@ -236,6 +284,7 @@ function parseInner(raw: unknown): Request | null {
         content: str(message.content, MAX_CONTENT_LENGTH, 'content'),
         category: message.category as Category | undefined,
         tags: stringList(message.tags, MAX_TAGS, 64, 'tags'),
+        ...(message.permissions === undefined ? {} : { permissions: permissions(message.permissions) }),
       };
     }
     case 'memory/update':
@@ -246,6 +295,7 @@ function parseInner(raw: unknown): Request | null {
       };
     case 'memory/unshare':
     case 'memory/delete':
+    case 'memory/undo':
       return { type: message.type, id: id(message.id) };
     case 'ui/open-dashboard': {
       const view = message.view ?? 'library';

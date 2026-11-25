@@ -1,7 +1,7 @@
 import { findSimilar } from './duplicates';
 import { findSensitive } from './sensitive';
 import { normalizeText } from './text';
-import { MAX_CONTENT_LENGTH, type Memory, type SiteId } from './types';
+import { MAX_CONTENT_LENGTH, SITE_IDS, type Memory, type SiteId } from './types';
 
 /**
  * Finding memories a chatbot already has that OmniMemory doesn't.
@@ -33,6 +33,42 @@ export interface FoundItem {
   conflictsWith?: string;
   /** Why: "Same topic, different numbers", "One says the opposite…", "Overlaps…". */
   conflictReason?: string;
+  /** Other chatbots that remember the same thing (shown once, not once per chatbot). */
+  alsoOn?: SiteId[];
+}
+
+/** Do two finds say the same thing? */
+export function sameFind(a: string, b: string): boolean {
+  return findSimilar(a, [{ id: 'x', content: b, status: 'active' } as Memory]).some((match) => match.kind === 'duplicate');
+}
+
+/**
+ * The same fact found on several chatbots, shown once. The first copy that
+ * can be linked back to its chatbot's entry (Gemini) is kept as the visible
+ * one; the others ride along as its twins.
+ */
+export function groupFinds(items: FoundItem[]): { shown: FoundItem; twins: FoundItem[] }[] {
+  const groups: { shown: FoundItem; twins: FoundItem[] }[] = [];
+  for (const item of items) {
+    const group = groups.find((existing) => existing.shown.site !== item.site && sameFind(existing.shown.text, item.text));
+    if (!group) {
+      groups.push({ shown: item, twins: [] });
+      continue;
+    }
+    if (item.remoteId && !group.shown.remoteId) {
+      group.twins.push(group.shown);
+      group.shown = item;
+    } else {
+      group.twins.push(item);
+    }
+  }
+  return groups.map(({ shown, twins }) => ({
+    shown:
+      twins.length > 0
+        ? { ...shown, alsoOn: SITE_IDS.filter((site) => site !== shown.site && twins.some((twin) => twin.site === site)) }
+        : shown,
+    twins,
+  }));
 }
 
 export interface DiscoverySource {
@@ -64,8 +100,69 @@ export function textKey(text: string): string {
 export function splitSentences(text: string): string[] {
   return text
     .split(/\n+|(?<=[.!?])\s+(?=[A-Z"“(])/u)
-    .map((sentence) => sentence.replace(/^\s*[-•*]\s+/, '').trim())
+    .map((sentence) => sentence.replace(/^\s*(?:[-•*]|\d{1,2}[.)])\s+/, '').trim())
     .filter(Boolean);
+}
+
+/**
+ * Chatbots write their memory as light Markdown: "## Interests",
+ * "**Work context**", "- **Likes:** hiking". Drop heading-only lines and the
+ * formatting marks, keep the words.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    .split(/\n/)
+    .filter((line) => {
+      const bare = line.trim();
+      if (/^#{1,6}\s/.test(bare)) return false; // # Heading
+      if (/^(?:\*\*|__)[^*_]+(?:\*\*|__):?$/.test(bare)) return false; // **Heading**
+      if (/^(?:\*|_)[^*_]+(?:\*|_):?$/.test(bare)) return false; // *Heading*
+      if (/^[-=*_]{3,}$/.test(bare)) return false; // --- rule
+      return true;
+    })
+    .map((line) =>
+      line
+        .replace(/(\*\*|__)(.+?)\1/g, '$2')
+        .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, '$1$2')
+        .replace(/`([^`]+)`/g, '$1'),
+    )
+    .join('\n');
+}
+
+/** Verbs a chatbot often starts a note with, leaving out "The user" ("Prefers short answers"). */
+const LEADING_VERBS = new Set(
+  (
+    'prefers likes loves enjoys uses works lives wants needs plans studies owns speaks attends writes reads builds ' +
+    'runs plays teaches follows values dislikes hates drives travels cooks goes takes knows believes tends codes ' +
+    'programs develops creates manages leads practices learns keeps avoids eats drinks watches listens supports ' +
+    'struggles hopes intends aims focuses specializes collaborates volunteers maintains'
+  ).split(' '),
+);
+
+/**
+ * The person a summary is about, when it's written in the third person by
+ * name ("Sam is a nurse… Sam has a dog"). Needs the same capitalised word to
+ * start at least two sentences followed by is/has/was/'s or a present-tense verb.
+ */
+export function summaryName(sentences: string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const sentence of sentences) {
+    const match = /^([A-Z][a-z]+(?:-[A-Z][a-z]+)?)(?:'s|’s|\s+(?:is|has|was|(\w+s))\b)/.exec(sentence.trim());
+    if (!match) continue;
+    const [, name, verb] = match;
+    if (/^(?:The|This|That|These|Those|It|He|She|They|You|User|Users|There|Their|His|Her)$/.test(name)) continue;
+    if (verb && !LEADING_VERBS.has(verb.toLowerCase())) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let most = 1;
+  for (const [name, count] of counts) {
+    if (count > most) {
+      best = name;
+      most = count;
+    }
+  }
+  return best;
 }
 
 /** "likes" → "like", "watches" → "watch", "studies" → "study". */
@@ -84,8 +181,28 @@ const OBJECT_AFTER = /\b(to|for|with|about|of|from|by|at|on|help|helps|give|give
  * your own voice. Only common, unambiguous patterns are changed — the review
  * page lets the user fix anything else.
  */
-export function toFirstPerson(sentence: string): string {
+export function toFirstPerson(sentence: string, name?: string | null): string {
   let out = sentence.trim();
+  // "Sam is …", "Sam's …", "He has …": a summary about you, in the third person.
+  const subject = name ? `(?:${name}|he|she)` : '(?:he|she)';
+  out = out.replace(new RegExp(`^${subject}\\s+is\\b`, 'i'), 'I am');
+  out = out.replace(new RegExp(`^${subject}\\s+has\\b`, 'i'), 'I have');
+  out = out.replace(new RegExp(`^${subject}\\s+was\\b`, 'i'), 'I was');
+  out = out.replace(new RegExp(`^${subject}\\s+does\\b`, 'i'), 'I do');
+  if (name) out = out.replace(new RegExp(`^${name}(?:'s|’s)\\s`), 'My ');
+  out = out.replace(/^(?:his|her)\s/i, 'My ');
+  out = out.replace(new RegExp(`^${subject}\\s+(\\w+s)\\b(?=\\s)`, 'i'), (match, verb: string) =>
+    LEADING_VERBS.has(verb.toLowerCase()) ? `I ${baseVerb(verb)}` : match,
+  );
+  if (name) out = out.replace(/\bhis\b/g, 'my');
+  // "Prefers short answers", "Is learning C++": the subject was left out.
+  out = out.replace(/^Is\b/, 'I am');
+  out = out.replace(/^Has\b/, 'I have');
+  out = out.replace(/^Was\b/, 'I was');
+  out = out.replace(/^Does\b/, 'I do');
+  out = out.replace(/^([A-Z][a-z]+s)\b(?=\s)/, (match, verb: string) =>
+    LEADING_VERBS.has(verb.toLowerCase()) ? `I ${baseVerb(verb).toLowerCase()}` : match,
+  );
   out = out.replace(/^(?:the\s+)?user\s+is\b/i, 'I am');
   out = out.replace(/^(?:the\s+)?user\s+has\b/i, 'I have');
   out = out.replace(/^(?:the\s+)?user\s+was\b/i, 'I was');
@@ -111,6 +228,16 @@ export function toFirstPerson(sentence: string): string {
   for (const [pattern, replacement] of swaps) out = out.replace(pattern, replacement);
   out = out.replace(OBJECT_AFTER, (match) => match.replace(/you$/i, 'me'));
   out = out.replace(/\byou\b/gi, 'I');
+  // "I play piano and is on a team" → "… and am on a team".
+  if (/^I\s/i.test(out) && !/^I\s/.test(sentence.trim())) {
+    out = out
+      .replace(/\b(and|but|or)\s+is\b/g, '$1 am')
+      .replace(/\b(and|but|or)\s+has\b/g, '$1 have')
+      .replace(/\b(and|but|or)\s+was\b/g, '$1 was')
+      .replace(/\b(and|but|or)\s+(\w+s)\b/g, (match, joiner: string, verb: string) =>
+        LEADING_VERBS.has(verb.toLowerCase()) ? `${joiner} ${baseVerb(verb)}` : match,
+      );
+  }
   // Sentence starts with a capital; "my"/"me" mid-sentence stay lower-case.
   out = out.replace(/^(my|i'm|i’m|i've|i’ve|i'll|i’ll|i'd|i’d|i)\b/, (word) => word.charAt(0).toUpperCase() + word.slice(1));
   return out;
@@ -154,8 +281,10 @@ export function candidatesFrom(source: DiscoverySource): string[] {
   if (source.whole) return [text];
 
   const firstPerson = /summary|saved memor|written by/i.test(source.group);
-  return splitSentences(text)
-    .map((sentence) => (firstPerson ? factOnly(toFirstPerson(sentence)) : sentence))
+  const sentences = splitSentences(stripMarkdown(text));
+  const name = firstPerson ? summaryName(sentences) : null;
+  return sentences
+    .map((sentence) => (firstPerson ? factOnly(toFirstPerson(sentence, name)) : sentence))
     .filter((sentence): sentence is string => sentence !== null && wordCount(sentence) >= MIN_WORDS);
 }
 
@@ -170,6 +299,8 @@ export function discover(
   dismissed: string[],
 ): FoundItem[] {
   const existing = memories.filter((memory) => memory.status !== 'deleted');
+  // Deleted on purpose: don't offer it back just because the chatbot still remembers it.
+  const deleted = memories.filter((memory) => memory.status === 'deleted').map((memory) => ({ ...memory, status: 'active' as const }));
   const skipped = new Set(dismissed);
   const seen = new Set<string>();
   const found: FoundItem[] = [];
@@ -186,6 +317,7 @@ export function discover(
 
       const similar = findSimilar(text, existing);
       if (similar.some((match) => match.kind === 'duplicate')) continue;
+      if (findSimilar(text, deleted).some((match) => match.kind === 'duplicate')) continue;
       if (findSimilar(text, accepted).some((match) => match.kind === 'duplicate')) continue;
       const conflict = similar.find((match) => match.kind === 'conflict');
       accepted.push({ id: `found-${key}`, content: text, status: 'active' } as Memory);

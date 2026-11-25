@@ -8,6 +8,12 @@ import type { SiteId } from '../../core/types';
 export interface SiteAdapter {
   readonly id: SiteId;
   readonly label: string;
+  /**
+   * Where the Memory button goes: just above the message box's right edge
+   * (default), or just below it on sites that put buttons of their own above
+   * the box (Gemini's quick replies).
+   */
+  readonly launcher?: 'above' | 'below';
 
   /** False on pages that are not a chat (sign-in screens and the like). */
   isActive(): boolean;

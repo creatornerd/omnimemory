@@ -76,7 +76,7 @@ describe('router — what a chatbot page can do', () => {
     const { service, ask } = createHarness();
     await service.create({ content: 'Fact', source: 'claude' });
     const result = await ask('chatgpt', { type: 'context/query', query: '', pageText: '' });
-    expect(Object.keys(result.items[0].memory).sort()).toEqual(['category', 'content', 'id', 'tags', 'updated_at']);
+    expect(Object.keys(result.items[0].memory).sort()).toEqual(['category', 'content', 'id', 'source', 'tags', 'updated_at']);
   });
 
   it('flags memories relevant to the conversation and searches on demand', async () => {

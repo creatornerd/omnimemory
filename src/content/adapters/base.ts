@@ -15,6 +15,7 @@ export interface AdapterConfig {
   insertStrategies: InsertStrategy[];
   /** Paths where the control should stay out of the way (e.g. sign-in). */
   inactivePaths?: RegExp;
+  launcher?: 'above' | 'below';
 }
 
 /** Last-resort selectors shared by every site, for when a redesign lands. */
@@ -114,6 +115,7 @@ export function createAdapter(config: AdapterConfig): SiteAdapter {
   return {
     id: config.id,
     label: SITES[config.id].label,
+    launcher: config.launcher,
     isActive: () => !config.inactivePaths?.test(window.location.pathname),
     findComposer,
     findAnchor,

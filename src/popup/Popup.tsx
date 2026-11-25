@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Inbox, Plus, Search, Trash2, X } from 'lucide-react';
-import { searchMemories, type Memory } from '../core';
+import { ArrowUpRight, ChevronRight, CircleAlert, Inbox, Plus, Search, Settings, Trash2, X } from 'lucide-react';
+import { SITE_IDS, searchMemories, type Memory } from '../core';
+import { SITES } from '../shared/sites';
+import { ShareDots } from '../ui/components/ShareDots';
 import { openDashboard, takePendingCapture } from '../shared/platform';
 import { MemoryForm, type MemoryFormValues } from '../ui/components/MemoryForm';
 import { Badge, Button, IconButton, Logo, Toggle } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
-import { cx, plural } from '../ui/format';
+import { ThemeToggle } from '../ui/components/ThemeToggle';
+import { cx, plural, timeAgo } from '../ui/format';
 import { useFound } from '../ui/hooks/useFound';
 import { useStore } from '../ui/hooks/useStore';
 import { repeatCheck } from '../ui/hooks/repeat-check';
@@ -60,68 +63,102 @@ export function Popup() {
   const paused = settings.sharingPaused;
 
   return (
-    <div className="flex h-[560px] w-[380px] flex-col bg-canvas">
-      <header className="flex items-center gap-2 px-3.5 pt-3 pb-2.5">
-        <Logo size={20} />
-        <h1 className="flex-1 text-[13px] font-semibold">OmniMemory</h1>
-        <label
-          className="flex items-center gap-2 text-[11px] text-ink-2"
-          title={paused ? 'No chatbot gets any memory until you turn this back on' : 'Chatbots can receive the memories you share'}
-        >
-          {paused ? 'Paused' : 'Sharing'}
-          <Toggle
-            label="Share memories with chatbots"
-            checked={!paused}
-            onChange={(on) => void service.updateSettings({ sharingPaused: !on })}
-          />
-        </label>
+    <div className="flex h-[560px] w-[380px] flex-col bg-surface">
+      <header className="flex items-center gap-[9px] pt-3.5 pr-3.5 pb-2.5 pl-4">
+        <Logo size={22} />
+        <h1 className="flex-1 text-sm font-semibold tracking-[-0.01em]">OmniMemory</h1>
+        <ThemeToggle theme={settings.theme} onChange={(theme) => void service.updateSettings({ theme })} />
+        <IconButton label="Settings" onClick={() => void openDashboard('settings')}>
+          <Settings size={15} />
+        </IconButton>
       </header>
 
-      {(found.length > 0 || held.length > 0) && (
-        <button
-          type="button"
-          onClick={() => void openDashboard(held.length > 0 ? 'chatbots' : 'review')}
-          className={cx(
-            'mx-3.5 mb-2.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs hover:opacity-90',
-            held.length > 0 ? 'bg-warn-soft text-warn' : 'bg-subtle text-ink-2',
-          )}
-        >
-          <Inbox size={13} className="shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {[
-              held.length > 0 ? `${plural(held.length, 'change needs', 'changes need')} your OK` : '',
-              found.length > 0 ? `${found.length} to review` : '',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+      <label className="mx-3 flex items-center gap-2.5 rounded-[10px] bg-subtle px-3 py-2.5">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-medium">{paused ? 'Sharing paused' : 'Sharing with chatbots'}</span>
+          <span className="mt-0.5 flex items-center gap-2 text-[11.5px] text-ink-2">
+            {paused
+              ? 'No chatbot gets any memory until you turn this on.'
+              : SITE_IDS.map((site) => (
+                  <span key={site} className="flex items-center gap-1">
+                    <span className="size-1.5 rounded-full" style={{ background: SITES[site].color }} />
+                    {SITES[site].label}
+                  </span>
+                ))}
           </span>
-          <ArrowUpRight size={13} className="shrink-0" />
-        </button>
+        </span>
+        <Toggle
+          label="Share memories with chatbots"
+          checked={!paused}
+          onChange={(on) => void service.updateSettings({ sharingPaused: !on })}
+        />
+      </label>
+
+      {(found.length > 0 || held.length > 0) && (
+        <div className="mx-3 mt-2.5 overflow-hidden rounded-[10px] border border-line">
+          {held.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void openDashboard('chatbots')}
+              className="flex w-full items-center gap-[9px] bg-warn-soft px-3 py-[9px] text-left text-[12.5px] text-warn hover:opacity-90"
+            >
+              <CircleAlert size={14} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                <b className="font-semibold">{plural(held.length, 'change', 'changes')}</b> need your OK
+              </span>
+              <ChevronRight size={14} className="shrink-0" />
+            </button>
+          )}
+          {found.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void openDashboard('review')}
+              className={cx(
+                'flex w-full items-center gap-[9px] px-3 py-[9px] text-left text-[12.5px] hover:bg-subtle',
+                held.length > 0 && 'border-t border-line',
+              )}
+            >
+              <Inbox size={14} className="shrink-0 text-ink-2" />
+              <span className="min-w-0 flex-1 truncate">
+                <b className="font-semibold">{plural(found.length, 'thing', 'things')}</b> your chatbots know to review
+              </span>
+              <ChevronRight size={14} className="shrink-0 text-ink-3" />
+            </button>
+          )}
+        </div>
       )}
 
-      <div className="relative px-3.5 pb-2">
-        <Search size={14} className="pointer-events-none absolute top-2 left-6 text-ink-3" />
-        <input
-          type="search"
-          autoFocus
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search memories"
-          aria-label="Search memories"
-          className="field h-8 pr-8 pl-8"
-        />
-        {query && (
-          <IconButton
-            label="Clear search"
-            className="absolute top-0.5 right-4"
-            onClick={() => setQuery('')}
-          >
-            <X size={13} />
-          </IconButton>
-        )}
+      <div className="flex gap-2 px-3 pt-3 pb-2">
+        <div className="relative min-w-0 flex-1">
+          <Search size={14} className="pointer-events-none absolute top-[10px] left-2.5 text-ink-3" />
+          <input
+            type="search"
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search memories"
+            aria-label="Search memories"
+            className="field h-[34px] pr-8 pl-8"
+          />
+          {query && (
+            <IconButton label="Clear search" className="absolute top-0.5 right-0.5" onClick={() => setQuery('')}>
+              <X size={13} />
+            </IconButton>
+          )}
+        </div>
+        <Button
+          variant="primary"
+          icon={<Plus size={14} />}
+          onClick={() => {
+            setCaptured(null);
+            setComposing(true);
+          }}
+        >
+          New
+        </Button>
       </div>
 
-      <main className="scroll-thin min-h-0 flex-1 overflow-y-auto border-t border-line">
+      <main className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {composing && (
           <section className="animate-rise border-b border-line bg-surface px-3.5 py-3">
             <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
@@ -143,9 +180,9 @@ export function Popup() {
           </section>
         )}
 
-        {query.trim() && (
-          <h2 className="px-3.5 pt-2.5 pb-1 text-[11px] text-ink-3">{plural(results.length, 'result')}</h2>
-        )}
+        <h2 className="px-4 pt-1.5 pb-1 text-[11.5px] font-semibold text-ink-3">
+          {query.trim() ? plural(results.length, 'result') : 'Recent'}
+        </h2>
 
         {!loading && results.length === 0 && (
           <p className="px-3.5 py-6 text-center text-xs leading-relaxed text-ink-3">
@@ -187,7 +224,7 @@ export function Popup() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-start gap-1 py-2 pr-2 pl-3.5 transition-colors hover:bg-subtle">
+                <div className="flex items-start gap-1 py-[9px] pr-2 pl-4 transition-colors hover:bg-subtle">
                   <button
                     type="button"
                     className="min-w-0 flex-1 text-left"
@@ -196,18 +233,20 @@ export function Popup() {
                   >
                     <p
                       className={cx(
-                        'line-clamp-2 text-[13px] leading-snug',
+                        'line-clamp-2 text-[13px] leading-[1.45]',
                         (!memory.enabled || memory.status === 'outdated') && 'text-ink-2',
                       )}
                     >
                       {memory.content}
                     </p>
-                    {(!memory.enabled || memory.status === 'outdated') && (
-                      <p className="mt-1 flex items-center gap-1.5">
-                        {!memory.enabled && <Badge>Private</Badge>}
-                        {memory.status === 'outdated' && <Badge tone="warn">Outdated</Badge>}
-                      </p>
-                    )}
+                    <p className="mt-1 flex items-center gap-2 text-[11px] text-ink-3">
+                      {memory.enabled ? <ShareDots memory={memory} /> : <Badge>Private</Badge>}
+                      {memory.status === 'outdated' && <Badge tone="warn">Outdated</Badge>}
+                      <span>
+                        {memory.category} ·{' '}
+                        {memory.last_used_at ? `used ${timeAgo(memory.last_used_at)}` : `updated ${timeAgo(memory.updated_at)}`}
+                      </span>
+                    </p>
                   </button>
                   <div className="flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                     <IconButton label="Delete" tone="danger" onClick={() => setConfirmingId(memory.id)}>
@@ -221,20 +260,12 @@ export function Popup() {
         </ul>
       </main>
 
-      <footer className="flex items-center gap-2 border-t border-line bg-surface px-3.5 py-2.5">
-        <Button
-          variant="primary"
-          icon={<Plus size={14} />}
-          onClick={() => {
-            setCaptured(null);
-            setComposing(true);
-          }}
-        >
-          New memory
+      <footer className="flex items-center gap-2 border-t border-line bg-canvas px-3 py-2.5">
+        <Button variant="ghost" onClick={() => void openDashboard('home')}>
+          Open dashboard
+          <ArrowUpRight size={14} />
         </Button>
-        <Button className="ml-auto" variant="ghost" icon={<ArrowUpRight size={14} />} onClick={() => void openDashboard('library')}>
-          Open OmniMemory
-        </Button>
+        <span className="ml-auto text-[11.5px] text-ink-3">{plural(library.length, 'memory', 'memories')} on this device</span>
       </footer>
     </div>
   );

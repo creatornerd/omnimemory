@@ -23,6 +23,7 @@ import { MemoryRow } from './MemoryRow';
 import { MergeDialog } from './MergeDialog';
 import { RepeatsDialog } from './RepeatsDialog';
 import { repeatCheck } from '../ui/hooks/repeat-check';
+import { Help } from './help';
 
 type SharingFilter = 'any' | SiteId | 'private' | 'none';
 type StatusFilter = 'any' | 'active' | 'outdated';
@@ -51,9 +52,11 @@ interface LibraryProps {
   store: Store;
   /** Bumped to open the new-memory form. */
   createRequest?: number;
+  /** A search started on the Home page; `n` changes on every new search. */
+  searchRequest?: { query: string; category?: Category; n: number };
 }
 
-export function Library({ store, createRequest = 0 }: LibraryProps) {
+export function Library({ store, createRequest = 0, searchRequest }: LibraryProps) {
   const { service, library, settings, loading } = store;
   const toast = useToast();
   const [category, setCategory] = useState<Category | 'all'>('all');
@@ -74,6 +77,11 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
   useEffect(() => {
     if (createRequest > 0) setCreating(true);
   }, [createRequest]);
+  useEffect(() => {
+    if (!searchRequest) return;
+    setQuery(searchRequest.query);
+    setCategory(searchRequest.category ?? 'all');
+  }, [searchRequest]);
   const [deleting, setDeleting] = useState<Memory[] | null>(null);
   const [merging, setMerging] = useState<Memory[] | null>(null);
 
@@ -159,10 +167,13 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex flex-wrap items-center gap-3 px-6 pt-5 pb-3">
+      <header className="flex flex-wrap items-center gap-3 px-10 pt-8 pb-4 max-md:px-5">
         <div className="mr-auto">
-          <h1 className="text-base font-semibold">{category === 'all' ? 'All memories' : category}</h1>
-          <p className="text-xs text-ink-3">
+          <h1 className="flex items-center gap-1.5 text-[22px] font-semibold tracking-[-0.02em]">
+            {category === 'all' ? 'All memories' : category}
+            <Help id="library.page" />
+          </h1>
+          <p className="mt-0.5 text-[13px] text-ink-3">
             {loading
               ? 'Loading…'
               : filtersActive
@@ -171,14 +182,14 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
           </p>
         </div>
         <div className="relative w-64 max-w-full">
-          <Search size={14} className="pointer-events-none absolute top-2 left-2.5 text-ink-3" />
+          <Search size={14} className="pointer-events-none absolute top-[10px] left-2.5 text-ink-3" />
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search memories"
             aria-label="Search memories"
-            className="field h-8 pl-8"
+            className="field h-[34px] pl-8"
           />
         </div>
         {settings.aiEnabled && library.length > 1 && (
@@ -191,7 +202,7 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
         </Button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-1.5 px-6 pb-2.5">
+      <div className="flex flex-wrap items-center gap-1.5 px-10 pt-1 pb-4 max-md:px-5">
         {(['all', ...CATEGORIES] as const).map((name) => {
           const count = name === 'all' ? library.length : (counts.get(name) ?? 0);
           if (name !== 'all' && count === 0 && category !== name) return null;
@@ -202,7 +213,7 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
               aria-pressed={category === name}
               onClick={() => setCategory(name)}
               className={cx(
-                'h-7 rounded-full border px-3 text-xs transition-colors',
+                'h-[30px] rounded-full border px-3 text-[12.5px] font-medium transition-colors',
                 category === name
                   ? 'border-accent bg-accent text-accent-fg'
                   : 'border-line text-ink-2 hover:border-line-strong hover:text-ink',
@@ -224,6 +235,7 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
           >
             Filters{filterCount > 0 ? ` · ${filterCount}` : ''}
           </Button>
+          <Help id="library.filters" />
           <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             <option value="recent">{query.trim() ? 'Best match' : 'Most recent'}</option>
             <option value="oldest">Oldest</option>
@@ -253,7 +265,7 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
       </div>
 
       {(showFilters || filterCount > 0) && (
-      <div className="animate-rise flex flex-wrap items-center gap-2 px-6 pb-2.5">
+      <div className="animate-rise flex flex-wrap items-center gap-2 px-10 pb-2.5 max-md:px-5">
         <Select aria-label="Filter by source" value={source} onChange={(e) => setSource(e.target.value as Source | 'any')}>
           <option value="any">Any source</option>
           {SOURCES.map((value) => (
@@ -292,13 +304,11 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
       </div>
       )}
 
-      <div className="border-b border-line" />
-
       {selected.size > 0 && (
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line bg-canvas px-4 text-xs">
+      <div className="animate-rise mx-10 mb-2.5 flex min-h-11 shrink-0 flex-wrap items-center gap-2 rounded-xl border border-line bg-subtle px-3.5 py-1.5 text-xs max-md:mx-5">
         <input
           type="checkbox"
-          className="size-3.5 accent-(--om-accent)"
+          className="size-3.5 accent-(--om-brand)"
           aria-label="Select all shown memories"
           checked={allSelected}
           disabled={visible.length === 0}
@@ -377,9 +387,10 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
       </div>
       )}
 
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-10 pt-1.5 pb-16 max-md:px-5">
+        <div className="rounded-[14px] border border-line bg-surface">
         {duplicateGroups.length > 0 && !filtersActive && category === 'all' && (
-          <div className="flex items-center gap-3 border-b border-line bg-warn-soft px-4 py-2 text-xs text-warn">
+          <div className="flex items-center gap-2.5 rounded-t-[13px] border-b border-line bg-warn-soft py-2.5 pr-3 pl-4 text-[13px] text-warn">
             <span className="flex-1">
               {plural(duplicateGroups.length, 'set')} of memories look like repeats.
             </span>
@@ -458,6 +469,7 @@ export function Library({ store, createRequest = 0 }: LibraryProps) {
             />
           ))}
         </ul>
+        </div>
       </div>
 
       <ConfirmDialog

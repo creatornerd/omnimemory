@@ -91,6 +91,7 @@ function draftFromUnknown(entry: unknown, keepSource: boolean): MemoryDraft | nu
     source: keepSource && isSource(record.source) ? record.source : 'import',
     enabled: typeof record.enabled === 'boolean' ? record.enabled : undefined,
     permissions: readPermissions(record.permissions),
+    aiAllowed: record.aiAllowed === false ? false : undefined,
   };
 }
 
