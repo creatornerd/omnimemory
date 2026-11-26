@@ -49,3 +49,7 @@ const SOURCE_LABELS: Record<Source, string> = {
 export function sourceLabel(source: Source): string {
   return SOURCE_LABELS[source] ?? source;
 }
+
+/** Shown wherever the chatbots are named prominently. */
+export const TRADEMARK_NOTICE =
+  'ChatGPT is a trademark of OpenAI. Claude is a trademark of Anthropic. Gemini is a trademark of Google LLC. OmniMemory is an independent project and isn’t affiliated with, endorsed by or sponsored by any of them.';

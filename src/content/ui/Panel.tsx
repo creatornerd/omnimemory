@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import {
   ArrowUpRight,
   BookmarkPlus,
-  ChevronRight,
   Copy,
   EyeOff,
   Pencil,
@@ -557,25 +556,17 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
                 {status.text}
               </p>
             )}
-            {showPreview && preview?.text && (
-              <pre className="om-preview" tabIndex={0}>
-                {preview.text}
-              </pre>
+            {preview?.text && (
+              <MessagePreview
+                adapter={adapter}
+                text={preview.text}
+                truncated={preview.truncated}
+                exact={showPreview}
+                onToggleExact={() => setShowPreview((value) => !value)}
+              />
             )}
             <div className="om-actions" style={{ marginTop: 0 }}>
-              {preview?.text ? (
-                <button
-                  className="om-preview-toggle om-grow"
-                  aria-expanded={showPreview}
-                  title={`What ${adapter.label} will receive`}
-                  onClick={() => setShowPreview((value) => !value)}
-                >
-                  <ChevronRight size={13} />
-                  Preview{preview.truncated ? ' (shortened)' : ''}
-                </button>
-              ) : (
-                <span className="om-hint om-grow">{selected.length === 0 ? 'Tick memories to add them' : ''}</span>
-              )}
+              <span className="om-hint om-grow">{selected.length === 0 ? 'Tick memories to add them' : ''}</span>
               <button
                 className="om-btn"
                 title="Copy instead"
@@ -597,6 +588,83 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── What the message will look like ──────────────────────────────────────
+
+/** The memory lines of a built context (the "- " lines between header and footer). */
+function contextLines(text: string): string[] {
+  return text
+    .split('\n')
+    .filter((line) => line.startsWith('- '))
+    .map((line) => line.slice(2));
+}
+
+/** The message box's text, kept current while the preview is showing. */
+function useDraft(adapter: SiteAdapter): string {
+  const [text, setText] = useState(() => adapter.readDraft());
+  useEffect(() => {
+    const read = () => setText(adapter.readDraft());
+    const timer = setInterval(read, 800);
+    document.addEventListener('input', read, true);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('input', read, true);
+    };
+  }, [adapter]);
+  return text;
+}
+
+/**
+ * A picture of the message as it will be once "Add" is pressed: the ticked
+ * memories go in above whatever is already typed. "Exact text" shows the
+ * plain text that is inserted (or copied), word for word.
+ */
+function MessagePreview({
+  adapter,
+  text,
+  truncated,
+  exact,
+  onToggleExact,
+}: {
+  adapter: SiteAdapter;
+  text: string;
+  truncated: boolean;
+  exact: boolean;
+  onToggleExact: () => void;
+}) {
+  const draftText = useDraft(adapter).replace(/\s+/g, ' ').trim();
+  const lines = contextLines(text);
+  return (
+    <div className="om-msg-wrap">
+      <div className="om-section-row om-msg-head">
+        <span className="om-grow">
+          Your message{truncated ? ' (some memories left out: too long)' : ''}
+        </span>
+        <button className="om-link" aria-expanded={exact} onClick={onToggleExact}>
+          {exact ? 'Show preview' : 'Exact text'}
+        </button>
+      </div>
+      {exact ? (
+        <pre className="om-preview" tabIndex={0}>
+          {text}
+        </pre>
+      ) : (
+        <div className="om-msg" aria-label={`Preview of your ${adapter.label} message`}>
+          <div className="om-msg-ctx">
+            {lines.map((line, index) => (
+              <div key={`${index}-${line}`} className="om-msg-line">
+                {line}
+              </div>
+            ))}
+          </div>
+          <div className={draftText ? 'om-msg-draft' : 'om-msg-draft om-msg-empty'}>
+            {draftText || 'What you type goes here.'}
+          </div>
+        </div>
       )}
     </div>
   );

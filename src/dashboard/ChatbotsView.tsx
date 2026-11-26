@@ -17,7 +17,7 @@ import { ActivityFeed, Approvals } from './SyncPanels';
 import { requestSync } from './sync-actions';
 import { onChange } from '../shared/change-bus';
 import { getSyncService } from '../shared/platform';
-import { SITES } from '../shared/sites';
+import { SITES, TRADEMARK_NOTICE } from '../shared/sites';
 import { useFound } from '../ui/hooks/useFound';
 import { Badge, Button, Notice, Toggle } from '../ui/components/primitives';
 import { useToast } from '../ui/components/Toast';
@@ -339,6 +339,8 @@ export function ChatbotsView({ store }: { store: Store }) {
         {(SITE_IDS as readonly SiteId[]).map((site) => (
           <SiteCard key={site} site={site} state={states[site]} store={store} />
         ))}
+
+        <p className="text-[11.5px] leading-relaxed text-ink-3">{TRADEMARK_NOTICE}</p>
       </div>
     </div>
   );

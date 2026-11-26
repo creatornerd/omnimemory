@@ -383,9 +383,14 @@ export function SettingsView({ store }: { store: Store }) {
         </Section>
 
         <Section title="Help">
-          <Row label="Welcome tour" hint="A quick walk through saving memories, sharing, and chatbot sync.">
+          <Row label="Welcome tour" hint="A short intro to saving memories and chatbot sync, then a look around.">
             <Button size="sm" onClick={() => (window.location.hash = '/welcome')}>
               Take the tour again
+            </Button>
+          </Row>
+          <Row label="Dashboard walkthrough" hint="Popups that point at each part of the dashboard and say what it’s for.">
+            <Button size="sm" onClick={() => (window.location.hash = '/walkthrough')}>
+              Show me around
             </Button>
           </Row>
         </Section>

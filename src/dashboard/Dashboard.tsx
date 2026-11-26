@@ -20,6 +20,7 @@ import { Library } from './Library';
 import { SettingsView } from './SettingsView';
 import { Trash } from './Trash';
 import { Welcome } from './Welcome';
+import { Coachmarks } from './Coachmarks';
 import { repeatCheck } from '../ui/hooks/repeat-check';
 import { Help } from './help';
 
@@ -36,13 +37,16 @@ interface NavItemProps {
   /** An amber dot: something here is waiting on you. */
   dot?: boolean;
   small?: boolean;
+  /** Where the dashboard walkthrough points. */
+  tour?: string;
   children: ReactNode;
 }
 
-function NavItem({ active, onClick, icon, count, dot, small, children }: NavItemProps) {
+function NavItem({ active, onClick, icon, count, dot, small, tour, children }: NavItemProps) {
   return (
     <button
       type="button"
+      data-tour={tour}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cx(
@@ -68,13 +72,16 @@ export function Dashboard() {
   const [captured, setCaptured] = useState<string | null>(null);
   // Opened at #/welcome right after install, or from Settings.
   const [welcome, setWelcome] = useState(() => window.location.hash.replace(/^#\/?/, '') === 'welcome');
+  const [walk, setWalk] = useState(() => window.location.hash.replace(/^#\/?/, '') === 'walkthrough');
   const [createRequest, setCreateRequest] = useState(0);
   const [searchRequest, setSearchRequest] = useState<{ query: string; category?: Category; n: number } | undefined>();
 
   useEffect(() => {
     const onHash = () => {
       setView(viewFromHash());
-      if (window.location.hash.replace(/^#\/?/, '') === 'welcome') setWelcome(true);
+      const hash = window.location.hash.replace(/^#\/?/, '');
+      if (hash === 'welcome') setWelcome(true);
+      if (hash === 'walkthrough') setWalk(true);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -102,19 +109,19 @@ export function Dashboard() {
         </div>
 
         <div className="space-y-0.5">
-          <NavItem active={view === 'home'} onClick={() => go('home')} icon={<House size={16} />}>
+          <NavItem tour="home" active={view === 'home'} onClick={() => go('home')} icon={<House size={16} />}>
             Home
           </NavItem>
-          <NavItem active={view === 'library'} onClick={() => go('library')} icon={<LibraryIcon size={16} />} count={library.length}>
+          <NavItem tour="library" active={view === 'library'} onClick={() => go('library')} icon={<LibraryIcon size={16} />} count={library.length}>
             Memories
           </NavItem>
-          <NavItem active={view === 'review'} onClick={() => go('review')} icon={<Inbox size={16} />} count={found.length}>
+          <NavItem tour="review" active={view === 'review'} onClick={() => go('review')} icon={<Inbox size={16} />} count={found.length}>
             Review
           </NavItem>
-          <NavItem active={view === 'chatbots'} onClick={() => go('chatbots')} icon={<Bot size={16} />} dot={held.length > 0}>
+          <NavItem tour="chatbots" active={view === 'chatbots'} onClick={() => go('chatbots')} icon={<Bot size={16} />} dot={held.length > 0}>
             Chatbots
           </NavItem>
-          <NavItem active={view === 'assistant'} onClick={() => go('assistant')} icon={<Sparkles size={16} />}>
+          <NavItem tour="assistant" active={view === 'assistant'} onClick={() => go('assistant')} icon={<Sparkles size={16} />}>
             Assistant
           </NavItem>
         </div>
@@ -122,10 +129,10 @@ export function Dashboard() {
         <div className="min-h-6 flex-1" />
 
         <div className="mb-3 space-y-0.5">
-          <NavItem small active={view === 'trash'} onClick={() => go('trash')} icon={<Trash2 size={15} />} count={trash.length}>
+          <NavItem small tour="trash" active={view === 'trash'} onClick={() => go('trash')} icon={<Trash2 size={15} />} count={trash.length}>
             Recently deleted
           </NavItem>
-          <NavItem small active={view === 'settings'} onClick={() => go('settings')} icon={<SettingsIcon size={15} />}>
+          <NavItem small tour="settings" active={view === 'settings'} onClick={() => go('settings')} icon={<SettingsIcon size={15} />}>
             Settings
           </NavItem>
           <NavItem small active={view === 'about'} onClick={() => go('about')} icon={<Info size={15} />}>
@@ -134,7 +141,7 @@ export function Dashboard() {
           <ThemeToggle variant="row" theme={settings.theme} onChange={(theme) => void service.updateSettings({ theme })} />
         </div>
 
-        <div className="rounded-xl border border-line bg-surface p-3">
+        <div data-tour="sharing" className="rounded-xl border border-line bg-surface p-3">
           <label className="flex items-center gap-2">
             <span className="flex flex-1 items-center gap-1 text-[13px] font-semibold">
               {settings.sharingPaused ? 'Sharing paused' : 'Sharing with chatbots'}
@@ -191,6 +198,13 @@ export function Dashboard() {
           setWelcome(false);
           if (window.location.hash.replace(/^#\/?/, '') === 'welcome') go('home');
         }}
+        onFinish={() => setWalk(true)}
+      />
+
+      <Coachmarks
+        open={walk}
+        onClose={() => setWalk(false)}
+        onNavigate={go}
         onAddMemory={() => {
           go('library');
           setCreateRequest((count) => count + 1);

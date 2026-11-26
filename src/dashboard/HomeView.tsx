@@ -301,6 +301,7 @@ export function HomeView({ store, found, held, onSearch, onCategory, onNavigate,
 
         <button
           type="button"
+          data-tour="new-memory"
           onClick={onCreate}
           className="mt-9 flex w-full items-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3.5 text-left text-[13.5px] hover:bg-subtle"
         >

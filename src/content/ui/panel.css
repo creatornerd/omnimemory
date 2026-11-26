@@ -828,3 +828,74 @@ select.om-field {
   flex: 1;
   min-width: 0;
 }
+
+/* ── Preview of the message once "Add" is pressed ──────────────────────── */
+.om-msg-wrap {
+  margin: 0 0 8px;
+}
+
+.om-msg-head {
+  padding: 0 0 5px !important;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.om-msg {
+  max-height: min(150px, 24vh);
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  scrollbar-width: thin;
+}
+
+.om-msg-ctx {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  border-left: 2px solid var(--brand);
+}
+
+.om-msg-line {
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  animation: om-msg-in 220ms ease-out;
+}
+
+.om-msg-line::before {
+  content: '• ';
+  color: var(--brand);
+}
+
+.om-msg-draft {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.om-msg-empty {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+@keyframes om-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .om-msg-line {
+    animation: none;
+  }
+}

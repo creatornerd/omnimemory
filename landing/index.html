@@ -58,6 +58,7 @@
           <a href="#features">Features</a>
           <a href="#privacy">Privacy</a>
           <a href="#faq">FAQ</a>
+          <a href="/troubleshooting">Help</a>
           <a href="/about">About</a>
         </nav>
         <button class="theme-btn" type="button" aria-label="Switch between light and dark mode" title="Light / dark mode" onclick="var r=document.documentElement,t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem('om-theme',t)}catch(e){}">
@@ -90,11 +91,19 @@
             <div class="tray" data-anim="hero">
               <div class="tray-head"><img class="logo-mark" src="/logo.svg" width="16" height="16" alt="" />Suggested for this chat</div>
               <div class="tray-list">
-                <div class="tray-item on"><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I’m vegetarian.</div>
-                <div class="tray-item on"><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I cook for a family of four.</div>
-                <div class="tray-item"><span class="tick"></span><span style="color: var(--body-strong)">I prefer short answers.</span></div>
+                <div class="tray-item on" data-line="I’m vegetarian."><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I’m vegetarian.</div>
+                <div class="tray-item on" data-line="I cook for a family of four."><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I cook for a family of four.</div>
+                <div class="tray-section">Everything else</div>
+                <div class="tray-item"><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span><span style="color: var(--body-strong)">I prefer short answers.</span></div>
               </div>
-              <div class="tray-foot"><span data-count>2 selected</span><span class="mini-btn" data-btn>Add 2 to message</span></div>
+              <div class="tray-preview" data-preview>
+                <div class="tp-label">Your message</div>
+                <div class="tp-box">
+                  <div class="tp-ctx" data-ctx><div class="tp-line">I’m vegetarian.</div><div class="tp-line">I cook for a family of four.</div></div>
+                  <div class="tp-draft">Plan a week of easy dinners for us.</div>
+                </div>
+              </div>
+              <div class="tray-foot"><span data-hint></span><span class="mini-btn mini-ghost">Copy</span><span class="mini-btn" data-btn>Add 2 to message</span></div>
             </div>
             <div class="composer">
               <span>Plan a week of easy dinners for us.</span>
@@ -110,6 +119,7 @@
           <span class="site-chip"><span class="dot" style="background: var(--chatgpt)"></span>ChatGPT</span>
           <span class="site-chip"><span class="dot" style="background: var(--claude)"></span>Claude</span>
           <span class="site-chip"><span class="dot" style="background: var(--gemini)"></span>Gemini</span>
+          <span class="strip-note">An independent project, not made by or affiliated with OpenAI, Anthropic or Google.</span>
         </div>
       </div>
 
@@ -118,21 +128,30 @@
         <div class="steps">
           <div class="step">
             <div class="step-art" aria-hidden="true" data-anim="save">
-              <div class="card-mini" style="padding: 12px">
+              <div class="card-mini save-card">
+                <div class="mini-label">New memory</div>
                 <div class="type-box" data-type>I program VEX V5 robots using PROS and LemLib.</div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px"><span class="mini-btn" data-btn style="height: 26px; padding: 0 11px; font-size: 11.5px">Save memory</span></div>
+                <div class="mini-share"><span>Share with</span><span class="chip on">ChatGPT</span><span class="chip on">Claude</span><span class="chip on">Gemini</span></div>
+                <div class="mini-foot"><span class="mini-select" data-cat>Auto · Projects</span><span class="mini-btn" data-btn>Save memory</span></div>
+                <div class="mini-status" data-status hidden>Memory saved.</div>
               </div>
             </div>
             <div>
               <h3>1. Save it</h3>
-              <p class="body">From the toolbar, by highlighting text on any page, or right from the chat. Each memory is one short fact.</p>
+              <p class="body">From the toolbar, by highlighting text on any page, or with + in the chat. Choose which chatbots can use it; OmniMemory picks a category and warns you about repeats.</p>
             </div>
           </div>
           <div class="step">
             <div class="step-art" aria-hidden="true" data-anim="add">
-              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px; width: 100%; max-width: 260px">
-                <span class="pill" data-pill><img class="logo-mark" src="/logo.svg" width="16" height="16" alt="" />Memory<span class="count">2</span></span>
-                <div class="card-mini" style="border-radius: 16px; padding: 10px 14px; color: var(--ink-2); box-shadow: none">
+              <div class="add-scene">
+                <div class="add-top"><span class="flash" data-flash hidden>Added 2 memories</span><span class="pill" data-pill><img class="logo-mark" src="/logo.svg" width="16" height="16" alt="" />Memory</span></div>
+                <div class="mini-panel" data-panel hidden>
+                  <div class="mp-head">Suggested for this chat</div>
+                  <div class="tray-item" data-row><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I’m a nurse in Seattle.</div>
+                  <div class="tray-item" data-row><span class="tick"><svg class="icon" style="width: 10px; height: 10px; stroke-width: 3"><use href="#i-check" /></svg></span>I prefer short answers.</div>
+                  <div class="mp-foot"><span class="mini-btn" data-btn>Add to message</span></div>
+                </div>
+                <div class="card-mini composer-mini">
                   <div class="ctx" data-ctx>
                     <div>
                       <div class="ctx-line">I’m a nurse in Seattle.</div>
@@ -145,20 +164,21 @@
             </div>
             <div>
               <h3>2. Add it to a chat</h3>
-              <p class="body">Click Memory above the message box. The ones that fit your chat are suggested first. Tick what you want, then read it before you send.</p>
+              <p class="body">Click Memory by the message box. The ones that fit your chat are suggested first. Tick what you want, see a preview of your message, and press Add. It never sends for you.</p>
             </div>
           </div>
           <div class="step">
             <div class="step-art" aria-hidden="true">
-              <div class="card-mini" style="overflow: hidden" data-anim="sync">
-                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--chatgpt)"></span><span class="name">ChatGPT</span><span class="badge badge-ok">In sync</span></div>
-                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--claude)"></span><span class="name">Claude</span><span class="badge badge-ok">In sync</span></div>
-                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--gemini)"></span><span class="name">Gemini</span><span class="badge badge-warn">Waiting for your OK</span></div>
+              <div class="card-mini sync-card" data-anim="sync">
+                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--chatgpt)"></span><span class="name">ChatGPT</span><span class="badge badge-ok" data-badge>In sync · just now</span><span class="sw on" data-sw></span></div>
+                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--claude)"></span><span class="name">Claude</span><span class="badge badge-ok" data-badge>In sync · just now</span><span class="sw on" data-sw></span></div>
+                <div class="sync-row"><span class="dot" style="width: 7px; height: 7px; background: var(--gemini)"></span><span class="name">Gemini</span><span class="badge badge-ok" data-badge>In sync · just now</span><span class="sw on" data-sw></span></div>
+                <div class="sync-foot" data-ask hidden><span>3 chatbots waiting for your OK</span><span class="mini-btn" data-approve>Approve</span></div>
               </div>
             </div>
             <div>
               <h3>3. Keep chatbots in step</h3>
-              <p class="body">Turn on sync and each chatbot’s own memory stays up to date. You see a preview before anything changes.</p>
+              <p class="body">Turn on sync and each chatbot’s own memory stays up to date. It shows you what it would write and waits for your OK, and every change can be undone.</p>
             </div>
           </div>
         </div>
@@ -293,6 +313,10 @@
             <p>Adding memories to a message may stop working for that site until OmniMemory is updated. Copy still works, and everything else keeps running.</p>
           </details>
           <details>
+            <summary><span>Something isn’t working. What should I try?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
+            <p>Reload the chatbot’s page, check you’re signed in, and try sync again in a minute. The <a href="/troubleshooting">troubleshooting guide</a> covers the Memory button, sync, Gemini errors, repeats and more.</p>
+          </details>
+          <details>
             <summary><span>Which browsers does it work in?</span><svg class="icon"><use href="#i-plus" /></svg></summary>
             <p>Chrome 120 or newer, and Chromium browsers such as Edge and Brave. A Firefox version is being prepared for Firefox Add-ons; it will be listed there rather than on the Chrome Web Store.</p>
           </details>
@@ -322,9 +346,11 @@
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
+          <a href="/troubleshooting">Troubleshooting</a>
           <a href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">GitHub</a>
         </nav>
         <span class="copy">© 2026 Ahaan Hossain</span>
+        <p class="tm">ChatGPT is a trademark of OpenAI. Claude is a trademark of Anthropic. Gemini is a trademark of Google LLC. OmniMemory is an independent project and isn’t affiliated with, endorsed by or sponsored by any of them.</p>
       </div>
     </footer>
     <script src="/motion.js" defer></script>

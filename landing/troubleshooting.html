@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OmniMemory troubleshooting</title>
+    <meta name="description" content="Fixes for common OmniMemory problems: the Memory button, adding memories to a chat, sync with ChatGPT, Claude and Gemini, repeats, and the AI assistant." />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <script>
+      try {
+        var t = localStorage.getItem('om-theme');
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></symbol>
+      <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path stroke="none" fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.4-5.26 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z" /></symbol>
+    </svg>
+
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="/">
+          <img class="logo-mark" src="/logo.svg" width="26" height="26" alt="" />
+          OmniMemory
+        </a>
+        <nav class="site-nav" aria-label="Main">
+          <a href="/#how-it-works">How it works</a>
+          <a href="/#features">Features</a>
+          <a href="/#privacy">Privacy</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/troubleshooting">Help</a>
+          <a href="/about">About</a>
+        </nav>
+        <button class="theme-btn" type="button" aria-label="Switch between light and dark mode" title="Light / dark mode" onclick="var r=document.documentElement,t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem('om-theme',t)}catch(e){}">
+          <svg class="icon moon" viewBox="0 0 24 24" style="width: 17px; height: 17px"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
+          <svg class="icon sun" viewBox="0 0 24 24" style="width: 17px; height: 17px"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
+        </button>
+        <a class="btn btn-dark btn-sm" href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </header>
+
+    <main class="wrap" style="padding-bottom: 96px">
+      <section class="about-hero">
+        <p class="eyebrow">Troubleshooting</p>
+        <h1>Something not working?</h1>
+        <p class="lead">Most problems are fixed by one of the quick checks below. If not, find what you’re seeing further down. OmniMemory never needs your password, so no fix here asks for one.</p>
+      </section>
+
+      <section class="bio-card policy">
+        <h2>Try these first</h2>
+        <ol>
+          <li><strong>Reload the chatbot’s page.</strong> After OmniMemory is installed or updated, tabs that were already open don’t have it until they reload.</li>
+          <li><strong>Try again in a minute.</strong> Chatbot sites are sometimes slow or busy. Sync waits and retries by itself, but pressing <em>Sync now</em> on the Chatbots page a second time often finishes the job.</li>
+          <li><strong>Check you’re signed in</strong> to the chatbot in this same browser, and that the site works in a normal tab.</li>
+          <li><strong>Check the sharing switch.</strong> If “Sharing paused” shows at the bottom of the dashboard’s sidebar, chatbots get nothing and nothing syncs until you turn it back on.</li>
+          <li><strong>Update OmniMemory.</strong> Chatbot sites change without warning, and an update may already fix it.</li>
+        </ol>
+        <p>Jump to: <a href="#button">The Memory button</a> · <a href="#adding">Adding to a chat</a> · <a href="#sync">Sync</a> · <a href="#gemini">Gemini</a> · <a href="#down">Is the chatbot down?</a> · <a href="#repeats">Repeats and missing memories</a> · <a href="#assistant">The AI assistant</a> · <a href="#help">Still stuck</a></p>
+
+        <h2 id="button">The Memory button doesn’t show up</h2>
+        <ul>
+          <li>It only appears on chatgpt.com, claude.ai and gemini.google.com, and not on sign-in pages.</li>
+          <li>Reload the page. If you just installed or updated OmniMemory, this is almost always the fix.</li>
+          <li>Press <strong>Alt+Shift+M</strong> to open the panel even if you can’t see the button.</li>
+          <li>Check OmniMemory is turned on in your browser’s extensions page (chrome://extensions in Chrome).</li>
+          <li>If the panel says “OmniMemory isn’t available”, the extension was updated or restarted while the page was open. Reload the page.</li>
+        </ul>
+
+        <h2 id="adding">Memories didn’t go into my message</h2>
+        <ul>
+          <li>If OmniMemory can’t type into the message box, it copies the text instead and tells you. Click in the message box and paste.</li>
+          <li>Choose <em>Exact text</em> in the panel to see exactly what will be added, word for word, and copy it by hand if you need to.</li>
+          <li>A memory marked “Already in your message” is already there, so it isn’t added twice.</li>
+          <li>If a memory is missing from the panel, it may not be shared with that chatbot. Check its sharing button on the Memories page.</li>
+        </ul>
+
+        <h2 id="sync">Sync isn’t working, or needs a few tries</h2>
+        <ul>
+          <li><strong>“Sign in to … to sync your memories.”</strong> Open the chatbot in this browser, sign in, then press <em>Sync now</em> on the Chatbots page.</li>
+          <li><strong>“Waiting for your OK”.</strong> Sync never writes for the first time, or removes something it didn’t add, without asking. Open Chatbots and approve or decline the changes listed there.</li>
+          <li><strong>It says it will try again later.</strong> The chatbot was busy or didn’t answer. OmniMemory tries again on its own; you can also wait a minute and press <em>Sync now</em>.</li>
+          <li><strong>“… didn’t keep the change.”</strong> The chatbot’s site didn’t save what was written. Wait a moment and press <em>Sync now</em> again.</li>
+          <li><strong>“Stopped: writing would have changed your own text.”</strong> OmniMemory only writes inside its own marked section. Something you typed in that settings box overlaps it. Open the chatbot’s settings, move your own text outside the OmniMemory section, then sync again.</li>
+          <li><strong>“Some memories didn’t fit.”</strong> ChatGPT and Claude limit how much text their settings hold. The most recently used memories are kept. Make some memories private for that chatbot, or shorten them.</li>
+          <li>Sync works best with the chatbot open in a tab. Keep one tab open while it runs, and don’t edit the same settings by hand at the same moment.</li>
+        </ul>
+
+        <h2 id="gemini">Gemini shows errors sometimes</h2>
+        <ul>
+          <li><strong>More than one Google account?</strong> OmniMemory syncs the account the Gemini tab is using (the one in the address, such as gemini.google.com/u/1/). Open Gemini with the account you want, then press <em>Sync now</em>.</li>
+          <li><strong>“Gemini is busy right now.”</strong> Google limits how quickly changes can be made. Wait a few minutes. Large first syncs can take a couple of rounds.</li>
+          <li><strong>“Gemini sent an unexpected reply” or an error with a number.</strong> Reload the Gemini tab so it gets a fresh sign-in, then try again. If it keeps happening, Gemini may have changed something, so check for an OmniMemory update.</li>
+          <li><strong>“Gemini didn’t save this memory.”</strong> Gemini may refuse some kinds of text. Try rewording that memory.</li>
+          <li>Look in Gemini’s own settings for its saved instructions. If your account doesn’t have that page (some accounts may have it turned off), sync can’t write there.</li>
+        </ul>
+
+        <h2 id="down">Is the chatbot down?</h2>
+        <p>Sometimes the problem is the chatbot itself, not OmniMemory. If the site is slow or won’t load in a normal tab, sync and the Memory button can’t work either. Check the official status pages: <a href="https://status.openai.com" target="_blank" rel="noopener">OpenAI status</a> for ChatGPT and <a href="https://status.anthropic.com" target="_blank" rel="noopener">Anthropic status</a> for Claude. For Gemini, try gemini.google.com in a normal tab. If it’s down, wait and try later; your memories are safe on your device in the meantime.</p>
+
+        <h2 id="repeats">Repeats, or a memory went missing</h2>
+        <ul>
+          <li><strong>The same memory shows twice on a chatbot.</strong> Run sync again: OmniMemory spots extra copies and asks before removing one, on the Chatbots page.</li>
+          <li><strong>The same fact shows on the Review page.</strong> A fact found on several chatbots is shown once. Keep it once, or untick it to skip it.</li>
+          <li><strong>A memory disappeared.</strong> Look in Recently deleted; memories stay there for 30 days. On the Chatbots page, the activity list has an Undo for each change sync made.</li>
+          <li>Keep a backup: Settings → Export saves all your memories to a file you can import later.</li>
+        </ul>
+
+        <h2 id="assistant">The AI assistant isn’t answering</h2>
+        <ul>
+          <li>It’s off until you turn it on in Settings → AI assistant.</li>
+          <li>The free version allows 10 AI actions a day. After that, wait until tomorrow or add your own Gemini API key.</li>
+          <li>If you use your own key and get an error, check the key is correct and still active in your Google account.</li>
+          <li>Everything else in OmniMemory works without the assistant.</li>
+        </ul>
+
+        <h2 id="help">Still stuck?</h2>
+        <p>Open an issue on <a href="https://github.com/creatornerd/omnimemory/issues" target="_blank" rel="noopener">GitHub</a> or email <a href="mailto:ahaan.hossain@yahoo.com">ahaan.hossain@yahoo.com</a>. Say which chatbot and browser you’re using and copy the exact message you saw. Please don’t include your memories, passwords or anything private.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <a class="brand" href="/"><img class="logo-mark" src="/logo.svg" width="18" height="18" alt="" />OmniMemory</a>
+        <nav aria-label="Footer">
+          <a href="/about">About</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/troubleshooting">Troubleshooting</a>
+          <a href="https://github.com/creatornerd/omnimemory" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+        <span class="copy">© 2026 Ahaan Hossain</span>
+        <p class="tm">ChatGPT is a trademark of OpenAI. Claude is a trademark of Anthropic. Gemini is a trademark of Google LLC. OmniMemory is an independent project and isn’t affiliated with, endorsed by or sponsored by any of them.</p>
+      </div>
+    </footer>
+  </body>
+</html>

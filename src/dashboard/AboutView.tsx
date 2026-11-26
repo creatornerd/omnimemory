@@ -1,5 +1,6 @@
 import { Mail } from 'lucide-react';
 import { Logo } from '../ui/components/primitives';
+import { TRADEMARK_NOTICE } from '../shared/sites';
 
 /**
  * About the developer. The bio is copied word for word from the developer's
@@ -89,6 +90,8 @@ export function AboutView() {
             . OmniMemory is free and provided as is: keep a backup with Settings → Export.
           </p>
         </section>
+
+        <p className="mt-6 text-[11.5px] leading-relaxed text-ink-3">{TRADEMARK_NOTICE}</p>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref, SelectHTMLAttributes } from 'react';
 import { cx } from '../format';
 
 /**
@@ -31,6 +31,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: 'sm' | 'md';
   icon?: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function Button({

@@ -458,7 +458,7 @@ p {
   gap: 16px;
 }
 .step-art {
-  height: 180px;
+  height: 200px;
   background: var(--muted);
   border-radius: 16px;
   display: flex;
@@ -797,13 +797,21 @@ p {
 }
 .site-footer nav {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 8px 18px;
 }
 .site-footer nav a {
   color: var(--ink-2);
 }
 .site-footer .copy {
   margin-left: auto;
+}
+.site-footer .tm {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
 }
 
 /* About page */
@@ -989,7 +997,7 @@ p {
 
 /* ── "How it works" animations (motion.js). The resting state is the finished picture. ── */
 .type-box {
-  min-height: 56px;
+  min-height: 52px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   padding: 8px 10px;
@@ -1097,4 +1105,285 @@ p {
   .badge-wait::before {
     animation: none;
   }
+}
+
+/* ── Pictures that mirror the extension's own panel ── */
+.tray-section {
+  padding: 8px 8px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.tray-preview {
+  display: grid;
+  grid-template-rows: 1fr;
+  padding: 0 12px 10px;
+  transition:
+    grid-template-rows 0.35s ease,
+    padding 0.35s ease,
+    opacity 0.3s ease;
+}
+.tray-preview > * {
+  min-height: 0;
+}
+.tray-preview.closed {
+  grid-template-rows: 0fr;
+  padding-bottom: 0;
+  opacity: 0;
+}
+.tray-preview > div:last-child {
+  overflow: hidden;
+}
+.tp-label {
+  padding-bottom: 4px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.tp-box {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.tp-ctx {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 5px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border-left: 2px solid var(--brand);
+  background: var(--brand-soft);
+  color: var(--ink-2);
+}
+.tp-line::before {
+  content: '• ';
+  color: var(--brand);
+}
+.tp-line {
+  transition: opacity 0.3s ease;
+}
+.tp-line.out {
+  display: none;
+}
+.mini-ghost {
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+}
+.mini-btn.dim {
+  opacity: 0.45;
+}
+
+.save-card {
+  padding: 11px 12px;
+}
+.mini-label {
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.mini-share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.mini-share > span:first-child {
+  margin-right: 2px;
+}
+.chip {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.chip.on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.mini-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mini-select {
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.save-card .mini-btn {
+  height: 26px;
+  padding: 0 11px;
+  font-size: 11.5px;
+}
+.mini-status {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ok);
+}
+
+.add-scene {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+}
+.add-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.flash {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 11px;
+  font-weight: 500;
+}
+.composer-mini {
+  border-radius: 16px;
+  padding: 10px 14px;
+  color: var(--ink-2);
+  box-shadow: none;
+}
+.mini-panel {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 1;
+  width: 230px;
+  padding: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px var(--shadow-soft);
+  font-size: 12px;
+  animation: om-rise 0.2s ease-out;
+}
+.mp-head {
+  padding: 4px 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.mp-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 2px 0;
+}
+.mp-foot .mini-btn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+@keyframes om-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.sync-card {
+  overflow: hidden;
+}
+.sync-card .badge {
+  white-space: nowrap;
+}
+.sw {
+  flex: none;
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background-color 0.25s ease;
+}
+.sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform 0.25s ease;
+}
+.sw.on {
+  background: var(--brand);
+}
+.sw.on::after {
+  transform: translateX(10px);
+}
+.badge-off {
+  background: var(--muted);
+  color: var(--ink-3);
+}
+.sync-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--row-line);
+  background: var(--warn-soft);
+  font-size: 11px;
+  color: var(--warn);
+}
+.sync-foot span:first-child {
+  flex: 1;
+}
+.sync-foot .mini-btn {
+  height: 22px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+.strip-note {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mini-panel {
+    animation: none;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+/* Room for the panel to open over the message box. */
+.step-art[data-anim='add'] {
+  align-items: flex-start;
+  padding-top: 26px;
+  overflow: hidden;
+}
+.mini-panel .tray-item {
+  padding: 5px 7px;
+  font-size: 11.5px;
 }
