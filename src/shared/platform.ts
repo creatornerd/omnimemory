@@ -1,4 +1,4 @@
-import { MemoryAssistant, SHARED_DAILY_LIMIT } from '../core/ai';
+import { MemoryAssistant, SHARED_DAILY_LIMIT, SHARED_DAILY_PICKS } from '../core/ai';
 import type { Settings } from '../core/types';
 import { IndexedDbBackend } from '../core/indexeddb-backend';
 import { MemoryService } from '../core/service';
@@ -27,6 +27,9 @@ export function getService(): MemoryService {
 }
 
 let assistant: MemoryAssistant | undefined;
+
+/** Picking memories for a message is only useful while the person is still typing. */
+const LIGHT_LIMITS = { timeoutMs: 8_000, totalMs: 12_000 };
 
 /**
  * OmniMemory's shared Gemini key, baked in at build time from .env.local
@@ -85,9 +88,19 @@ export async function aiStatus(): Promise<{ source: AiKeySource | null; used: nu
  */
 export function getAssistant(settings: Settings): MemoryAssistant | null {
   if (!settings.aiEnabled) return null;
-  assistant ??= new MemoryAssistant(async (request, model) => {
+  assistant ??= new MemoryAssistant(async (request, model, options) => {
     const resolved = await aiKey();
     if (!resolved) throw new AiError('Add your Gemini API key in Settings → AI assistant.');
+    if (options?.light) {
+      // Quick automatic picks: their own allowance on the shared key, short
+      // time limits, and on any trouble the caller falls back to word matching.
+      if (resolved.source === 'shared' && (await getService().getAiUsage('picks')).count >= SHARED_DAILY_PICKS) {
+        throw new AiError('Today’s automatic suggestions are used up.', false, 'limit');
+      }
+      const reply = await generateJson(request, resolved.key, model, LIGHT_LIMITS);
+      if (resolved.source === 'shared') await getService().recordAiUse('picks');
+      return reply;
+    }
     if (resolved.source === 'shared') {
       const { count } = await getService().getAiUsage();
       if (count >= SHARED_DAILY_LIMIT) {
@@ -105,7 +118,14 @@ export function getAssistant(settings: Settings): MemoryAssistant | null {
     } catch (error) {
       // The shared key is everyone's: if Google refuses it (its daily cap is
       // reached, or it was restricted), say so instead of "check your key".
-      if (error instanceof AiError && error.status !== undefined && error.status >= 400 && error.status < 500) {
+      // Passing problems (busy, a hiccup) keep Gemini's own "try again" message.
+      if (
+        error instanceof AiError &&
+        !error.retryable &&
+        error.status !== undefined &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
         throw new AiError(
           'The free AI allowance is busy right now. Try again later, or add your own Gemini key in Settings → AI assistant for unlimited use.',
           false,

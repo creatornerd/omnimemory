@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Check, Loader2, Minus, Pencil, Plus, RotateCcw, Sparkles, Undo2 } from 'lucide-react';
-import { CHAT_MODEL_LABEL, SHARED_DAILY_LIMIT, type ChatChange, type ChatTurn, type Memory } from '../core';
+import { AI_MODEL_LABEL, SHARED_DAILY_LIMIT, type ChatChange, type ChatTurn, type Memory } from '../core';
 import { onChange } from '../shared/change-bus';
 import { HAS_SHARED_KEY, aiStatus, getAssistant } from '../shared/platform';
 import { Badge, Button, Logo, Notice } from '../ui/components/primitives';
@@ -31,7 +31,6 @@ type Message =
       off: number[];
       status: 'pending' | 'applied' | 'dismissed' | 'undone';
       undo?: UndoRecord;
-      fellBack?: boolean;
     }
   | { id: number; role: 'error'; text: string };
 
@@ -146,7 +145,6 @@ export function AssistantView({ store }: { store: Store }) {
           changes: answer.changes,
           off: [],
           status: 'pending',
-          fellBack: answer.fellBack,
         },
       ]);
     } catch (error) {
@@ -249,7 +247,7 @@ export function AssistantView({ store }: { store: Store }) {
               Assistant <Help id="assistant.page" />
             </h1>
             <span className="inline-flex h-[22px] items-center rounded-md bg-muted px-2 text-xs font-medium text-ink-2">
-              {CHAT_MODEL_LABEL}
+              {AI_MODEL_LABEL}
             </span>
           </div>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
@@ -316,9 +314,6 @@ export function AssistantView({ store }: { store: Store }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="mt-0.5 text-sm leading-normal whitespace-pre-wrap">{message.text}</p>
-                  {message.fellBack && (
-                    <p className="mt-1 text-[11px] text-ink-3">Gemini 3.5 Flash was busy, so Flash Lite answered.</p>
-                  )}
                   {message.changes.length > 0 && (
                     <div className="mt-2.5 overflow-hidden rounded-xl border border-line bg-surface">
                       <ul className="max-h-80 divide-y divide-line overflow-y-auto">

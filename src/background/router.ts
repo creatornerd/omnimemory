@@ -11,6 +11,7 @@ import {
   sharingBlock,
   normalizeText,
   suggestCategory,
+  withoutContext,
   type Memory,
   type MemoryAssistant,
   type MemoryService,
@@ -22,6 +23,7 @@ import {
   parseRequestWithReason,
   type ContextResult,
   type DashboardView,
+  type FitResult,
   type QueryResult,
   type Request,
   type Response,
@@ -58,6 +60,31 @@ function requireSync(deps: RouterDeps): SyncService {
 }
 
 const MAX_RESULTS = 60;
+
+/**
+ * Recent "which memories fit" answers, so the bar above the message box and
+ * the panel share one Gemini request for the same draft.
+ */
+const fitCache = new Map<string, { at: number; ids: string[]; by: FitResult['by'] }>();
+const FIT_CACHE_MS = 10 * 60 * 1000;
+const MAX_FIT_WORDS = 3;
+
+function libraryStamp(memories: Memory[]): string {
+  let latest = '';
+  for (const memory of memories) if (memory.updated_at > latest) latest = memory.updated_at;
+  return `${memories.length}:${latest}`;
+}
+
+/** Memories that share enough words with what's being typed (on this device). */
+function fitByWords(memories: Memory[], draft: string, recent: string): Memory[] {
+  // What's typed matters most; the chat before it only when the draft finds nothing.
+  for (const text of [draft, `${recent} ${draft}`]) {
+    if (!text.trim()) continue;
+    const found = rankByRelevance(memories, text).filter((r) => r.relevant);
+    if (found.length > 0) return found.slice(0, MAX_FIT_WORDS).map((r) => r.memory);
+  }
+  return [];
+}
 
 /** How long a hide or delete made from a chatbot page can be taken back from there. */
 const UNDO_MS = 5 * 60 * 1000;
@@ -133,6 +160,41 @@ async function dispatch(request: Request, site: SiteId, deps: RouterDeps): Promi
         syncOn: settings.siteSync[site],
       };
       return result;
+    }
+
+    case 'context/fit': {
+      const [library, settings] = await Promise.all([service.library(), service.getSettings()]);
+      const shareable = shareableMemories(library, settings, site);
+      const draft = withoutContext(request.draft).replace(/\s+/g, ' ').trim();
+      const recent = withoutContext(request.recent).replace(/\s+/g, ' ').trim();
+      if (!settings.relevanceFromPage || shareable.length === 0 || (!draft && !recent)) {
+        return { items: [], by: 'words' } satisfies FitResult;
+      }
+      const byId = new Map(shareable.map((memory) => [memory.id, memory]));
+      const assistant = settings.aiMatching ? deps.assistant?.(settings) : null;
+      const key = [site, assistant ? 'ai' : 'words', libraryStamp(shareable), draft, recent].join('\u0000');
+      const now = Date.now();
+      for (const [k, entry] of fitCache) if (now - entry.at > FIT_CACHE_MS) fitCache.delete(k);
+      const cached = fitCache.get(key);
+      if (cached) {
+        return { items: cached.ids.flatMap((id) => byId.get(id) ?? []).map(toShared), by: cached.by } satisfies FitResult;
+      }
+      let picked: Memory[] | null = null;
+      let by: FitResult['by'] = 'words';
+      if (assistant) {
+        try {
+          picked = await assistant.pickFitting(draft, recent, shareable);
+          by = 'ai';
+        } catch {
+          picked = null; // busy or used up: match words instead, and don't remember that
+        }
+      }
+      const items = picked ?? fitByWords(shareable, draft, recent);
+      if (picked) {
+        fitCache.set(key, { at: now, ids: items.map((memory) => memory.id), by });
+        if (fitCache.size > 40) fitCache.delete(fitCache.keys().next().value as string);
+      }
+      return { items: items.map(toShared), by } satisfies FitResult;
     }
 
     case 'ai/suggest': {

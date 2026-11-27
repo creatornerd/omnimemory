@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Plus, X } from 'lucide-react';
-import { SHARED_DAILY_LIMIT, TRASH_RETENTION_DAYS } from '../core';
+import { TRASH_RETENTION_DAYS } from '../core';
 import type { DashboardView } from '../shared/messages';
-import { HAS_SHARED_KEY } from '../shared/platform';
 import { Button } from '../ui/components/primitives';
+import type { Store } from '../ui/hooks/useStore';
+import { AiSwitch } from './AiSwitch';
 
 /**
  * A walk around the dashboard after the welcome tour: one popup at a time,
@@ -16,6 +17,8 @@ interface Mark {
   view?: DashboardView;
   title: string;
   body: ReactNode;
+  /** Something to switch on right here, beneath the text. */
+  extra?: (store: Store) => ReactNode;
 }
 
 const MARKS: Mark[] = [
@@ -47,7 +50,8 @@ const MARKS: Mark[] = [
     target: 'assistant',
     view: 'assistant',
     title: 'Assistant',
-    body: `Ask in plain words to add, change or tidy up memories. It shows each change first, and nothing happens until you press Apply. It’s off until you turn it on${HAS_SHARED_KEY ? ` (${SHARED_DAILY_LIMIT} free actions a day)` : ''}.`,
+    body: 'Ask in plain words to add, change or tidy up memories. It shows each change first, and nothing happens until you press Apply.',
+    extra: (store) => <AiSwitch store={store} />,
   },
   {
     target: 'trash',
@@ -95,11 +99,13 @@ function findTarget(id: string): HTMLElement | null {
 
 export function Coachmarks({
   open,
+  store,
   onClose,
   onNavigate,
   onAddMemory,
 }: {
   open: boolean;
+  store: Store;
   onClose: () => void;
   onNavigate: (view: DashboardView) => void;
   onAddMemory: () => void;
@@ -266,6 +272,7 @@ export function Coachmarks({
           {mark.title}
         </h3>
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">{mark.body}</p>
+        {mark.extra && <div className="mt-3">{mark.extra(store)}</div>}
         <div className="mt-3.5 flex items-center gap-2">
           {index === 0 ? (
             <Button size="sm" variant="ghost" onClick={close}>

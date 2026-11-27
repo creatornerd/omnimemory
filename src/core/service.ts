@@ -177,10 +177,18 @@ export class MemoryService {
   }
 
   /** AI actions used today with OmniMemory's shared key (see shared/platform.ts). */
-  async getAiUsage(): Promise<{ day: string; count: number }> {
+  /**
+   * Today's use of the shared key: "actions" are what the user asked for
+   * (the daily allowance); "picks" are the quick automatic checks for
+   * memories that fit a message, counted apart with their own cap.
+   */
+  async getAiUsage(kind: 'actions' | 'picks' = 'actions'): Promise<{ day: string; count: number }> {
     const today = localDay(this.now());
     try {
-      const stored = JSON.parse((await this.backend.getSecret('ai-usage')) ?? '{}') as { day?: unknown; count?: unknown };
+      const stored = JSON.parse((await this.backend.getSecret(kind === 'picks' ? 'ai-picks' : 'ai-usage')) ?? '{}') as {
+        day?: unknown;
+        count?: unknown;
+      };
       if (stored.day === today && typeof stored.count === 'number') return { day: today, count: stored.count };
     } catch {
       // unreadable: start the day fresh
@@ -188,11 +196,12 @@ export class MemoryService {
     return { day: today, count: 0 };
   }
 
-  async recordAiUse(): Promise<number> {
-    const usage = await this.getAiUsage();
+  async recordAiUse(kind: 'actions' | 'picks' = 'actions'): Promise<number> {
+    const usage = await this.getAiUsage(kind);
     const count = usage.count + 1;
-    await this.backend.putSecret('ai-usage', JSON.stringify({ day: usage.day, count }));
-    this.onChange();
+    await this.backend.putSecret(kind === 'picks' ? 'ai-picks' : 'ai-usage', JSON.stringify({ day: usage.day, count }));
+    // Picks aren't shown anywhere, so they don't redraw every page.
+    if (kind === 'actions') this.onChange();
     return count;
   }
 

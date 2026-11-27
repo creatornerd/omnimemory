@@ -3,6 +3,7 @@ import { CONTEXT_FOOTER, CONTEXT_HEADER } from '../../core/context';
 import { BLOCK_END, BLOCK_START } from '../../core/sync';
 import { MAX_CONTENT_LENGTH } from '../../core/types';
 import type { SiteAdapter } from '../adapters';
+import { FitBar } from './FitBar';
 import { Mark } from './Mark';
 import { Panel } from './Panel';
 
@@ -109,6 +110,8 @@ export function App({ adapter }: { adapter: SiteAdapter }) {
   const theme = useHostTheme();
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState('');
+  /** Memories to start ticked when the panel is opened from the "fits" bar. */
+  const [preselect, setPreselect] = useState<string[] | undefined>(undefined);
   const [flash, setFlash] = useState('');
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -119,6 +122,7 @@ export function App({ adapter }: { adapter: SiteAdapter }) {
   }, [adapter]);
 
   const toggle = useCallback(() => {
+    setPreselect(undefined);
     setOpen((current) => {
       // Only text the user has highlighted right now is offered for saving.
       if (!current) setSelection(pageSelection());
@@ -212,6 +216,20 @@ export function App({ adapter }: { adapter: SiteAdapter }) {
         <span>Memory</span>
       </button>
 
+      {!placement.docked && (
+        <FitBar
+          adapter={adapter}
+          pill={placement}
+          hidden={open || !!flash}
+          onDone={done}
+          onOpen={(ids) => {
+            setPreselect(ids);
+            setSelection(pageSelection());
+            setOpen(true);
+          }}
+        />
+      )}
+
       {flash && !open && (
         <div
           className="om-flash"
@@ -234,6 +252,7 @@ export function App({ adapter }: { adapter: SiteAdapter }) {
           onClearSelection={() => setSelection('')}
           onClose={close}
           onDone={done}
+          preselect={preselect}
         />
       )}
     </div>

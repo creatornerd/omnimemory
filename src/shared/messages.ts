@@ -27,6 +27,9 @@ export const MAX_QUERY_LENGTH = 200;
 export const MAX_PAGE_TEXT_LENGTH = 6000;
 export const MAX_IDS = 100;
 export const MAX_CONVERSATION_TEXT = 8000;
+/** What's typed, and the chat just before it, when asking which memories fit. */
+export const MAX_FIT_DRAFT = 1500;
+export const MAX_FIT_RECENT = 1500;
 
 export type DashboardView = 'home' | 'library' | 'assistant' | 'review' | 'chatbots' | 'trash' | 'settings' | 'about';
 export const DASHBOARD_VIEWS: readonly DashboardView[] = [
@@ -48,6 +51,8 @@ export const MAX_REMOTE_ID = 200;
 export type Request =
   | { type: 'context/query'; query: string; pageText: string }
   | { type: 'context/build'; ids: string[] }
+  /** Which memories fit the message being typed (by AI when it's on, otherwise by words). */
+  | { type: 'context/fit'; draft: string; recent: string }
   | { type: 'context/used'; ids: string[] }
   | { type: 'memory/review'; content: string }
   | { type: 'memory/create'; content: string; category?: Category; tags: string[]; permissions?: Partial<SitePermissions> }
@@ -95,6 +100,13 @@ export interface QueryResult {
   syncOn: boolean;
 }
 
+export interface FitResult {
+  /** Most useful first. Empty when nothing really fits. */
+  items: SharedMemory[];
+  /** How they were picked: by Gemini, or by matching words on this device. */
+  by: 'ai' | 'words';
+}
+
 export interface SuggestResult {
   suggestions: { text: string; category: Category }[];
   alreadyHave: number;
@@ -118,6 +130,7 @@ export interface ReviewResult {
 export interface ResponseMap {
   'context/query': QueryResult;
   'context/build': ContextResult;
+  'context/fit': FitResult;
   'context/used': null;
   'memory/review': ReviewResult;
   'memory/create': SharedMemory;
@@ -267,6 +280,12 @@ function parseInner(raw: unknown): Request | null {
         type: 'context/query',
         query: str(message.query ?? '', MAX_QUERY_LENGTH, 'query', true),
         pageText: str(message.pageText ?? '', MAX_PAGE_TEXT_LENGTH, 'pageText', true),
+      };
+    case 'context/fit':
+      return {
+        type: 'context/fit',
+        draft: str(message.draft ?? '', MAX_FIT_DRAFT, 'draft', true),
+        recent: str(message.recent ?? '', MAX_FIT_RECENT, 'recent', true),
       };
     case 'context/build':
     case 'context/used':

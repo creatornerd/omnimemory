@@ -36,6 +36,7 @@ import { SITES } from '../../shared/sites';
 import type { SiteAdapter } from '../adapters';
 import { send } from '../bridge';
 import { copyText } from '../clipboard';
+import { inMessage, useDraft, useFit } from './fit';
 import { Mark } from './Mark';
 
 interface PanelProps {
@@ -47,6 +48,8 @@ interface PanelProps {
   onClose: () => void;
   /** Close and show a short confirmation next to the launcher. */
   onDone: (message: string) => void;
+  /** Memories to start ticked (opened from the "fits this message" bar). */
+  preselect?: string[];
 }
 
 type Status = { tone: 'info' | 'warn'; text: string } | null;
@@ -73,20 +76,16 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
-const flat = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase();
-
-/** Memories already written into the message box (by an earlier "Add"). */
-function inMessage(adapter: SiteAdapter, memories: SharedMemory[]): Set<string> {
-  const text = flat(adapter.readDraft());
-  if (!text) return new Set();
-  return new Set(memories.filter((memory) => text.includes(flat(memory.content))).map((memory) => memory.id));
-}
-
-export function Panel({ adapter, style, selection, onClearSelection, onClose, onDone }: PanelProps) {
+export function Panel({ adapter, style, selection, onClearSelection, onClose, onDone, preselect }: PanelProps) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() => preselect ?? []);
+  // "Suggested for this chat": what fits the draft (or, with no draft, the chat on screen).
+  const fit = useFit(adapter, useDraft(adapter), { includeChat: true });
+  useEffect(() => {
+    if (fit?.items.length) setAlready((current) => new Set([...current, ...inMessage(adapter, fit.items)]));
+  }, [fit, adapter]);
   const [already, setAlready] = useState<Set<string>>(new Set());
   const [ghosts, setGhosts] = useState<Map<string, Ghost>>(new Map());
   const [preview, setPreview] = useState<ContextResult | null>(null);
@@ -169,7 +168,7 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
 
   /** Context for the ticked memories, leaving out any already in the message. */
   async function freshContext(): Promise<ContextResult | null> {
-    const memories = result?.items.map((item) => item.memory) ?? [];
+    const memories = [...(result?.items.map((item) => item.memory) ?? []), ...(fit?.items ?? [])];
     const present = inMessage(adapter, memories.filter((memory) => selected.includes(memory.id)));
     const ids = selected.filter((id) => !present.has(id));
     if (ids.length === 0) {
@@ -271,9 +270,11 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
 
   const searching = query.trim().length > 0;
   // Rows just hidden or deleted stay where they were, so nothing shifts under the cursor.
-  const items: { memory: SharedMemory; relevant: boolean; ghost?: Ghost }[] = (result?.items ?? []).filter(
-    (item) => !ghosts.has(item.memory.id),
-  );
+  const fitIds = new Set(searching ? [] : (fit?.items ?? []).map((memory) => memory.id));
+  const items: { memory: SharedMemory; relevant: boolean; ghost?: Ghost }[] = [
+    ...(searching ? [] : (fit?.items ?? []).map((memory) => ({ memory, relevant: true }))),
+    ...(result?.items ?? []).filter((item) => !fitIds.has(item.memory.id)).map((item) => ({ ...item, relevant: false })),
+  ].filter((item) => !ghosts.has(item.memory.id));
   if (!searching) {
     for (const ghost of [...ghosts.values()].sort((a, b) => a.index - b.index)) {
       items.splice(Math.min(ghost.index, items.length), 0, { memory: ghost.memory, relevant: ghost.relevant, ghost });
@@ -512,6 +513,9 @@ export function Panel({ adapter, style, selection, onClearSelection, onClose, on
               <div className="om-empty">No memories match “{query}”.</div>
             ) : (
               <>
+                {!searching && fit === null && result?.ai && (
+                  <div className="om-section">Finding memories that fit this chat…</div>
+                )}
                 {suggested.length > 0 && (
                   <>
                     <div className="om-section om-section-row">
@@ -604,20 +608,6 @@ function contextLines(text: string): string[] {
 }
 
 /** The message box's text, kept current while the preview is showing. */
-function useDraft(adapter: SiteAdapter): string {
-  const [text, setText] = useState(() => adapter.readDraft());
-  useEffect(() => {
-    const read = () => setText(adapter.readDraft());
-    const timer = setInterval(read, 800);
-    document.addEventListener('input', read, true);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('input', read, true);
-    };
-  }, [adapter]);
-  return text;
-}
-
 /**
  * A picture of the message as it will be once "Add" is pressed: the ticked
  * memories go in above whatever is already typed. "Exact text" shows the

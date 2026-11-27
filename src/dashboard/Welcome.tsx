@@ -8,6 +8,7 @@ import { useToast } from '../ui/components/Toast';
 import { cx } from '../ui/format';
 import type { Store } from '../ui/hooks/useStore';
 import { requestSync } from './sync-actions';
+import { AiSwitch } from './AiSwitch';
 import { HubDemo, SavingDemos } from './tour-demos';
 
 function SyncChoices({ store }: { store: Store }) {
@@ -109,18 +110,23 @@ const STEPS: Step[] = [
     body: () => <SavingDemos />,
   },
   {
-    title: 'Turn on sync',
+    title: 'Choose what to turn on',
     body: (store) => (
       <>
+        <h4 className="mb-1.5 text-[13px] font-semibold">Chatbot sync</h4>
         <p className="mb-3 text-[13px] leading-relaxed text-ink-2">
           Sync writes your memories into each chatbot’s own memory settings, so they’re there even when you don’t add
           them to a chat. OmniMemory checks each one and shows you what it would write before writing anything, and
           every change can be undone.
         </p>
         <SyncChoices store={store} />
+        <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+          Be signed in to each chatbot in this browser. You can change this any time under Chatbots.
+        </p>
+        <h4 className="mt-5 mb-1.5 text-[13px] font-semibold">AI features</h4>
+        <AiSwitch store={store} />
         <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
-          Be signed in to each chatbot in this browser. You can change this any time under Chatbots. Next, a quick look
-          around the dashboard.
+          Both are optional and can be changed later. Next, a quick look around the dashboard.
         </p>
       </>
     ),

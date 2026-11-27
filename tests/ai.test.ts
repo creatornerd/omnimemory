@@ -213,7 +213,7 @@ describe('AI assistant: chat', () => {
       };
     });
     const answer = await assistant.chat([{ role: 'user', text: 'Remove repeats' }], library);
-    expect(model).toBe('gemini-3.5-flash');
+    expect(model).toBe('gemini-3.5-flash-lite'); // starts on Flash Lite, the fast one
     expect(answer.reply).toMatch(/merged/);
     expect(answer.changes.map((change) => change.kind)).toEqual(['edit', 'delete', 'delete', 'add']);
     expect(answer.changes[0]).toMatchObject({ kind: 'edit', memory: { id: a.id } });
@@ -221,17 +221,6 @@ describe('AI assistant: chat', () => {
     expect(answer.memories.some((memory) => memory.id === priv.id)).toBe(false);
   });
 
-  it('falls back to Flash Lite when Flash is overloaded', async () => {
-    const models: string[] = [];
-    const assistant = new MemoryAssistant(async (_request, model) => {
-      models.push(model ?? '');
-      if (model === 'gemini-3.5-flash') throw Object.assign(new Error('busy'), { retryable: true });
-      return { reply: 'Nothing to change.', changes: [] };
-    });
-    const answer = await assistant.chat([{ role: 'user', text: 'Hi' }], []);
-    expect(models).toEqual(['gemini-3.5-flash', 'gemini-3.5-flash-lite']);
-    expect(answer.fellBack).toBe(true);
-  });
 });
 
 describe('assistant chat rules', () => {

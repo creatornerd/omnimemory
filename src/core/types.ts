@@ -114,6 +114,12 @@ export interface Settings {
    * imports. See core/ai.ts. The key itself is stored separately, never here.
    */
   aiEnabled: boolean;
+  /**
+   * With the AI on, pick the memories that fit what's being typed on a
+   * chatbot page by asking Gemini (the draft and recent messages are sent).
+   * Off: the panel matches words on this device only.
+   */
+  aiMatching: boolean;
 }
 
 /** A settings change. Per-chatbot switches can be changed one at a time. */
@@ -142,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
   siteSync: { chatgpt: false, claude: false, gemini: false },
   syncInBackground: true,
   aiEnabled: false,
+  aiMatching: true,
 };
 
 /** Fields a caller may supply when creating a memory. */

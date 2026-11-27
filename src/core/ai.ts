@@ -24,11 +24,17 @@ import { CATEGORIES, MAX_CONTENT_LENGTH, type Category, type Memory } from './ty
 
 /** AI actions a day with OmniMemory's shared key. Your own key has no OmniMemory limit. */
 export const SHARED_DAILY_LIMIT = 10;
+/** Quick automatic "which memories fit this message" checks a day with the shared key. */
+export const SHARED_DAILY_PICKS = 150;
 
-/** Quick background checks (repeats, imports). */
+/**
+ * Every request starts on Flash Lite: on the free tier it answers in about a
+ * second, while Flash often takes over a minute or is overloaded. The Gemini
+ * client moves to the other model when one stays busy.
+ */
 export const AI_MODEL = 'gemini-3.5-flash-lite';
 export const AI_MODEL_LABEL = 'Gemini 3.5 Flash Lite';
-/** The Assistant chat, which edits the whole memory list. */
+/** The fallback when Flash Lite stays busy. */
 export const CHAT_MODEL = 'gemini-3.5-flash';
 export const CHAT_MODEL_LABEL = 'Gemini 3.5 Flash';
 
@@ -49,8 +55,17 @@ export interface GeminiRequest {
   };
 }
 
+export interface GenerateOptions {
+  /**
+   * A small automatic request (picking memories that fit a message). It
+   * doesn't use up the shared key's daily actions; it has its own,
+   * larger allowance, and is given up quickly rather than retried for long.
+   */
+  light?: boolean;
+}
+
 /** Sends a request (to `model`, default AI_MODEL) and returns the reply's JSON. Supplied by the caller. */
-export type Generate = (request: GeminiRequest, model?: string) => Promise<unknown>;
+export type Generate = (request: GeminiRequest, model?: string, options?: GenerateOptions) => Promise<unknown>;
 
 /**
  * May this memory's text be sent to the AI? Only when the user would expect
@@ -349,8 +364,6 @@ export type ChatChange =
 export interface ChatAnswer {
   reply: string;
   changes: ChatChange[];
-  /** Set when Gemini 3.5 Flash was busy and Flash Lite answered instead. */
-  fellBack?: boolean;
 }
 
 const MAX_TURNS = 12;
@@ -518,6 +531,44 @@ export function parseChatSuggestions(reply: unknown): ChatSuggestions {
   return { suggestions, alreadyHave };
 }
 
+// ── 6. Memories that fit the message being typed ──────────────────────────
+
+const MAX_PICKS = 4;
+const MAX_FIT_MESSAGE = 1500;
+const MAX_FIT_RECENT = 1500;
+
+export function fitRequest(message: string, recent: string, memories: Memory[]): GeminiRequest {
+  const base = request(
+    [
+      'A person is about to send a MESSAGE to an AI chatbot. From their NOTES about themselves, pick the ones the chatbot should know to give a better, more personal answer.',
+      'Pick a note only if it would actually change or improve the answer to this message. RECENT CHAT, if given, is only there to explain what the message refers to.',
+      'Answer-style preferences (like short answers) count only when the message asks for something to be written or explained.',
+      `Most messages need 0 to 3 notes; picking none is fine. At most ${MAX_PICKS}. Return their indexes, most useful first.`,
+    ].join(' '),
+    `MESSAGE: ${cleanConversation(message).slice(-MAX_FIT_MESSAGE)}${
+      recent.trim() ? `\n\nRECENT CHAT: ${cleanConversation(recent).slice(-MAX_FIT_RECENT)}` : ''
+    }\n\nNOTES:\n${numbered(memories.map((memory) => memory.content))}`,
+    {
+      type: 'OBJECT',
+      properties: { indexes: { type: 'ARRAY', items: { type: 'INTEGER' } } },
+      required: ['indexes'],
+    },
+  );
+  // A quick pick: no need to think it over.
+  return { ...base, generationConfig: { ...base.generationConfig, thinkingConfig: { thinkingLevel: 'minimal' } } };
+}
+
+export function parseFit(reply: unknown, memories: Memory[]): Memory[] {
+  const picked: Memory[] = [];
+  for (const value of asArray(asRecord(reply).indexes)) {
+    const index = asIndex(value, memories.length);
+    if (index === null || picked.includes(memories[index])) continue;
+    picked.push(memories[index]);
+    if (picked.length >= MAX_PICKS) break;
+  }
+  return picked;
+}
+
 /** A tiny request to check a key works. Sends no memory text. */
 export function pingRequest(): GeminiRequest {
   return request('Reply with {"ok": true}.', 'Ping.', {
@@ -554,14 +605,8 @@ export class MemoryAssistant {
   /** One turn of the Assistant chat: a reply, and changes for the user to approve. */
   async chat(turns: ChatTurn[], library: Memory[]): Promise<ChatAnswer & { memories: Memory[] }> {
     const memories = newestFirst(library.filter(aiCanRead)).slice(0, MAX_LIBRARY);
-    const request = chatRequest(turns, memories);
-    try {
-      return { ...parseChat(await this.generate(request, CHAT_MODEL), memories), memories };
-    } catch (error) {
-      // Flash is sometimes overloaded; Flash Lite usually isn't.
-      if (!(error as { retryable?: boolean }).retryable) throw error;
-      return { ...parseChat(await this.generate(request, AI_MODEL), memories), memories, fellBack: true };
-    }
+    // Flash Lite first (fast); if it stays busy, the Gemini client tries Flash.
+    return { ...parseChat(await this.generate(chatRequest(turns, memories), AI_MODEL), memories), memories };
   }
 
   /** Durable facts from the chat on screen, for the user to approve. */
@@ -569,6 +614,14 @@ export class MemoryAssistant {
     if (!conversation.trim()) return { suggestions: [], alreadyHave: 0 };
     const existing = newestFirst(library.filter(aiCanRead)).slice(0, MAX_LIBRARY);
     return parseChatSuggestions(await this.generate(chatSuggestRequest(conversation, existing)));
+  }
+
+  /** The memories that would help a chatbot answer `message` (most useful first). */
+  async pickFitting(message: string, recent: string, library: Memory[]): Promise<Memory[]> {
+    if (!message.trim() && !recent.trim()) return [];
+    const memories = newestFirst(library.filter(aiCanRead)).slice(0, MAX_LIBRARY);
+    if (memories.length === 0) return [];
+    return parseFit(await this.generate(fitRequest(message, recent, memories), AI_MODEL, { light: true }), memories);
   }
 
   /** One clean list from everything the chatbots remember. */

@@ -257,7 +257,7 @@ export function SettingsView({ store }: { store: Store }) {
         <Section title="Suggestions">
           <Row
             label="Suggest memories that fit the conversation"
-            hint="When you open the OmniMemory panel on a chatbot page, it reads your draft and the last few visible messages to rank your memories. That text is used once, on this device, and is never stored. Turn off to rank by recency only."
+            hint="On a chatbot page, OmniMemory reads what you’re typing and the last few visible messages, and shows the memories that fit beside the Memory button and at the top of the panel. That text is never stored. Turn off to list memories by when you last used them."
           >
             <Toggle
               label="Suggest memories that fit the conversation"
@@ -265,6 +265,18 @@ export function SettingsView({ store }: { store: Store }) {
               onChange={(relevanceFromPage) => void service.updateSettings({ relevanceFromPage })}
             />
           </Row>
+          {settings.aiEnabled && settings.relevanceFromPage && (
+            <Row
+              label="Pick them with AI"
+              hint="Sends what you’re typing, the last few messages and the memories you share with that chatbot to Google’s Gemini, which picks the ones that would help. Much better than matching words. Off: matching words, on this device only."
+            >
+              <Toggle
+                label="Pick suggestions with AI"
+                checked={settings.aiMatching}
+                onChange={(aiMatching) => void service.updateSettings({ aiMatching })}
+              />
+            </Row>
+          )}
         </Section>
 
         <Section

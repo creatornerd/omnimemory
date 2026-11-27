@@ -43,3 +43,14 @@ export function buildContext(memories: Memory[]): BuiltContext {
     truncated,
   };
 }
+
+/** The text with any OmniMemory context block taken out (so it isn't matched against itself). */
+export function withoutContext(text: string): string {
+  let out = text;
+  for (;;) {
+    const start = out.indexOf(CONTEXT_HEADER);
+    if (start < 0) return out;
+    const end = out.indexOf(CONTEXT_FOOTER, start);
+    out = end < 0 ? out.slice(0, start) : `${out.slice(0, start)} ${out.slice(end + CONTEXT_FOOTER.length)}`;
+  }
+}

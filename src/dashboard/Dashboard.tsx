@@ -203,6 +203,7 @@ export function Dashboard() {
 
       <Coachmarks
         open={walk}
+        store={store}
         onClose={() => setWalk(false)}
         onNavigate={go}
         onAddMemory={() => {
